@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+
+export const dynamic = "force-dynamic";
 import { runGeneratorAgent } from "@/lib/agents/generator";
 import { runJudgeAgent } from "@/lib/agents/judge";
 import { searchEvidence, getAllEvidence } from "@/lib/tools/evidence";
