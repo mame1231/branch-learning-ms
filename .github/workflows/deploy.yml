@@ -22,6 +22,9 @@ jobs:
         with:
           push: true
           tags: ${{ secrets.REGISTRY_LOGIN_SERVER }}/branch-learning:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Deploy to Azure Container Apps
         uses: azure/container-apps-deploy-action@v1
