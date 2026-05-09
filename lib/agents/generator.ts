@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import { GRADE_CONFIG } from "@/lib/config/grades";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+function getGroq() { return new Groq({ apiKey: process.env.GROQ_API_KEY }); }
 
 export type GeneratorResult = {
   hasYokomichi: boolean;
@@ -80,7 +80,7 @@ export async function runGeneratorAgent(
   subject: string,
   characterMode = "both"
 ): Promise<GeneratorResult> {
-  const response = await groq.chat.completions.create({
+  const response = await getGroq().chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [
       { role: "system", content: buildSystemPrompt(grade, subject, characterMode) },
