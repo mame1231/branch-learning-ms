@@ -39,16 +39,43 @@ function randomBranchLabel() {
   return BRANCH_LABELS[Math.floor(Math.random() * BRANCH_LABELS.length)];
 }
 
+let audioCtx: AudioContext | null = null;
+let currentSource: AudioBufferSourceNode | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+}
+
+function unlockAudio() {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") ctx.resume();
+}
+
 function speakText(text: string, character: "sensei" | "tomo"): Promise<void> {
-  return new Promise((resolve) => {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "ja-JP";
-    utterance.pitch = character === "sensei" ? 1.0 : 1.4;
-    utterance.rate = 1.1;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.speak(utterance);
+  return new Promise(async (resolve) => {
+    if (currentSource) { currentSource.stop(); currentSource = null; }
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === "suspended") await ctx.resume();
+
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, character }),
+      });
+      if (!res.ok) throw new Error("TTS failed");
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => resolve();
+      currentSource = source;
+      source.start(0);
+    } catch {
+      resolve();
+    }
   });
 }
 
@@ -106,13 +133,7 @@ export default function Home() {
       });
   }, [router]);
 
-  // iOSはユーザージェスチャーからspeakを呼ばないとブロックされる
-  function unlockSpeech() {
-    if (speechUnlockedRef.current || typeof window === "undefined") return;
-    speechUnlockedRef.current = true;
-    const u = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(u);
-  }
+  function unlockSpeech() { unlockAudio(); }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -332,7 +353,7 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      window.speechSynthesis.cancel();
+      if (currentSource) { currentSource.stop(); currentSource = null; }
       recognition.start();
       setRecording(true);
     } catch {
@@ -344,6 +365,12 @@ export default function Home() {
     recognitionRef.current?.stop();
     setRecording(false);
     setInterimText("");
+  }
+
+  function stopSpeaking() {
+    if (currentSource) { currentSource.stop(); currentSource = null; }
+    setSpeaking(false);
+    setTalkingChar(null);
   }
 
   const micDisabled = loadingPhase !== "idle" || speaking;
@@ -592,7 +619,7 @@ export default function Home() {
   const subjectInfo = SUBJECTS.find((s) => s.id === subject);
 
   return (
-    <div className="min-h-screen bg-amber-50 flex flex-col">
+    <div className="h-[100dvh] bg-[#ebe5d9] sm:bg-amber-50 flex flex-col">
       {/* ヘッダー */}
       <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
         <div className="flex-1">
@@ -618,8 +645,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* キャラクターエリア */}
-      <div className="bg-white border-b border-green-100 px-4 py-3 flex items-end justify-center gap-8">
+      {/* キャラクターエリア（デスクトップのみ表示） */}
+      <div className="hidden sm:flex bg-white border-b border-green-100 px-4 py-3 items-end justify-center gap-8">
         {(characterMode === "sensei" || characterMode === "both") && (
           <div className="flex flex-col items-center gap-1">
             <CharacterAvatar character="sensei" size={72} talking={talkingChar === "sensei"} />
@@ -643,8 +670,10 @@ export default function Home() {
                 <div className="bg-blue-500 text-white px-4 py-3 rounded-2xl rounded-tr-sm max-w-[78%] sm:max-w-sm text-sm shadow">
                   {msg.text}
                 </div>
-                <div className="w-8 h-8 rounded-full bg-green-100 flex-shrink-0 flex items-center justify-center">
-                  <span className="text-lg">👤</span>
+                <div className="w-8 h-8 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-green-200">
+                  {profile.avatar_url
+                    ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                    : <span className="text-lg">👤</span>}
                 </div>
               </div>
             );
@@ -704,49 +733,53 @@ export default function Home() {
         <div ref={bottomRef} />
       </div>
 
-      {/* 入力エリア */}
-      <div className="bg-white border-t border-green-100 px-4 py-4 flex flex-col items-center gap-3">
-        <div className="flex items-center gap-2 w-full max-w-md">
+      {/* 入力エリア（LINE風） */}
+      <div className="bg-white border-t border-gray-200 px-3 py-2 pb-3">
+        <div className="flex items-center gap-2 max-w-2xl mx-auto">
+          <button
+            onClick={speaking ? stopSpeaking : recording ? stopRecording : startRecording}
+            disabled={!speaking && micDisabled}
+            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${
+              speaking
+                ? "bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md"
+                : loadingPhase !== "idle"
+                ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                : recording
+                ? "bg-red-500 text-white animate-pulse shadow-lg shadow-red-200"
+                : "bg-green-100 text-green-600 hover:bg-green-200 active:scale-95"
+            }`}
+          >
+            {speaking ? "⏹" : recording ? "⏹" : "🎤"}
+          </button>
+
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="メッセージを入力..."
+            placeholder={recording ? "話し中..." : micDisabled ? "少し待ってね..." : "メッセージを入力..."}
             disabled={micDisabled}
-            className="flex-1 border-2 border-green-400 rounded-full px-4 py-2.5 focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-200 disabled:opacity-40 bg-white text-gray-800 placeholder-gray-400"
+            className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-300 focus:bg-white transition-colors disabled:opacity-50 text-gray-800 placeholder-gray-400 text-sm"
           />
+
           <button
             onClick={() => { unlockSpeech(); send(); }}
             disabled={micDisabled || !input.trim()}
-            className="bg-green-500 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-green-600 disabled:opacity-40 transition-all text-lg"
+            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all ${
+              input.trim() && !micDisabled
+                ? "bg-green-500 text-white hover:bg-green-600 active:scale-95 shadow-md"
+                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }`}
           >
             ↑
           </button>
         </div>
 
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={micDisabled}
-          className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${
-            micDisabled
-              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-              : recording
-              ? "bg-red-500 text-white scale-110 shadow-red-300 shadow-xl animate-pulse"
-              : "bg-green-500 text-white hover:bg-green-600 active:scale-95"
-          }`}
-        >
-          {speaking ? "🔊" : recording ? "⏹" : "🎤"}
-        </button>
-        <p className="text-xs text-gray-400">
-          {speaking
-            ? "読み上げ中..."
-            : recording
-            ? "タップして停止"
-            : micDisabled
-            ? "少し待ってね..."
-            : "タップして話しかける"}
-        </p>
+        {(speaking || recording) && (
+          <p className="text-xs text-center text-gray-400 mt-1.5">
+            {speaking ? "⏹ タップで読み上げ停止" : "⏹ タップして停止"}
+          </p>
+        )}
       </div>
     </div>
   );
