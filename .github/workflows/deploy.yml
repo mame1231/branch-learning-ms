@@ -46,9 +46,12 @@ jobs:
         uses: azure/container-apps-deploy-action@v1
         with:
           acrName: ${{ secrets.ACR_NAME }}
+          acrUsername: ${{ secrets.REGISTRY_USERNAME }}
+          acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
           containerAppName: branch-learning
           resourceGroup: ${{ secrets.RESOURCE_GROUP }}
           imageToDeploy: ${{ secrets.REGISTRY_LOGIN_SERVER }}/branch-learning:${{ github.sha }}
+          targetPort: 3000
           environmentVariables: |
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
