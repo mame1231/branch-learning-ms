@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CharacterAvatar } from "@/components/CharacterAvatar";
+import { CharacterAvatar, CharacterKey } from "@/components/CharacterAvatar";
 import { GRADE_LABELS, SUBJECTS, toGradeDisplay } from "@/lib/config/grades";
 import { createClient } from "@/lib/supabase";
 
@@ -10,6 +10,13 @@ type Profile = { nickname: string | null; avatar_url: string | null };
 
 type Phase = "welcome" | "grade" | "subject" | "resume" | "chat";
 type TeacherGender = "female" | "male";
+type FriendType = "friend_1" | "friend_2" | "friend_3";
+
+const FRIEND_OPTIONS: { type: FriendType; label: string }[] = [
+  { type: "friend_1", label: "ともこ" },
+  { type: "friend_2", label: "けんた" },
+  { type: "friend_3", label: "エイリアン" },
+];
 
 type SavedConversation = {
   id: string
@@ -88,6 +95,7 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("welcome");
   const [savedConversations, setSavedConversations] = useState<Record<string, SavedConversation>>({});
   const [teacherGender, setTeacherGender] = useState<TeacherGender | null>(null);
+  const [friendType, setFriendType] = useState<FriendType | null>(null);
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
 
@@ -99,7 +107,7 @@ export default function Home() {
   const [loadingPhase, setLoadingPhase] = useState<"idle" | "thinking" | "checking">("idle");
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [talkingChar, setTalkingChar] = useState<"female" | "male" | null>(null);
+  const [talkingChar, setTalkingChar] = useState<CharacterKey | null>(null);
   const [interimText, setInterimText] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -114,6 +122,8 @@ export default function Home() {
     setStudentId(id);
     const savedTeacher = localStorage.getItem("teacher_gender") as TeacherGender | null;
     if (savedTeacher) setTeacherGender(savedTeacher);
+    const savedFriend = localStorage.getItem("friend_type") as FriendType | null;
+    if (savedFriend) setFriendType(savedFriend);
     const supabase = createClient();
 
     supabase.from("profiles").select("nickname, avatar_url").eq("id", id).single()
@@ -167,6 +177,11 @@ export default function Home() {
     setTeacherGender(gender);
   }
 
+  function selectFriend(type: FriendType) {
+    localStorage.setItem("friend_type", type);
+    setFriendType(type);
+  }
+
   function handleSubjectSelect(s: string) {
     unlockSpeech();
     setSubject(s);
@@ -179,7 +194,7 @@ export default function Home() {
 
   async function startChat(selectedSubject: string) {
     const teacher = teacherGender ?? "female";
-    const friend: TeacherGender = teacher === "female" ? "male" : "female";
+    const friend: CharacterKey = friendType ?? "friend_1";
     setPhase("chat");
     setLoadingPhase("thinking");
 
@@ -241,8 +256,8 @@ export default function Home() {
     setLoadingPhase("thinking");
 
     const teacher = teacherGender ?? "female";
-    const friend: TeacherGender = teacher === "female" ? "male" : "female";
-    const speechItems: Array<{ text: string; char: TeacherGender }> = [];
+    const friend: CharacterKey = friendType ?? "friend_1";
+    const speechItems: Array<{ text: string; char: CharacterKey }> = [];
 
     try {
       const res = await fetch("/api/branch", {
@@ -460,17 +475,39 @@ export default function Home() {
               ))}
             </div>
           </>
+        ) : !friendType ? (
+          <>
+            <p className="text-gray-700 font-bold mb-4">友達を選んでね！</p>
+            <div className="flex gap-3 mb-6">
+              {FRIEND_OPTIONS.map(({ type, label }) => (
+                <button key={type} onClick={() => selectFriend(type)}
+                  className="flex flex-col items-center gap-2 bg-white rounded-2xl px-4 py-4 shadow-md border-2 border-green-200 hover:border-green-400 active:scale-95 transition-all">
+                  <CharacterAvatar character={type} size={72} />
+                  <span className="text-sm font-bold text-green-700">{label}</span>
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           <>
-            <div className="flex flex-col items-center mb-4">
-              <CharacterAvatar character={teacherGender} size={100} />
-              <p className={`font-bold mt-2 ${teacherGender === "female" ? "text-pink-600" : "text-blue-600"}`}>
-                {teacherGender === "female" ? "女の先生" : "男の先生"}
-              </p>
-              <button onClick={() => { localStorage.removeItem("teacher_gender"); setTeacherGender(null); }}
-                className="text-xs text-gray-400 hover:text-gray-600 mt-1 underline">
-                変える
-              </button>
+            <div className="flex items-center justify-center gap-6 mb-5">
+              <div className="flex flex-col items-center">
+                <CharacterAvatar character={teacherGender} size={80} />
+                <p className={`text-xs font-bold mt-1 ${teacherGender === "female" ? "text-pink-600" : "text-blue-600"}`}>
+                  {teacherGender === "female" ? "女の先生" : "男の先生"}
+                </p>
+                <button onClick={() => { localStorage.removeItem("teacher_gender"); setTeacherGender(null); }}
+                  className="text-[10px] text-gray-400 hover:text-gray-600 underline">変える</button>
+              </div>
+              <span className="text-2xl text-gray-300">＆</span>
+              <div className="flex flex-col items-center">
+                <CharacterAvatar character={friendType} size={80} />
+                <p className="text-xs font-bold mt-1 text-green-700">
+                  {FRIEND_OPTIONS.find(f => f.type === friendType)?.label}
+                </p>
+                <button onClick={() => { localStorage.removeItem("friend_type"); setFriendType(null); }}
+                  className="text-[10px] text-gray-400 hover:text-gray-600 underline">変える</button>
+              </div>
             </div>
 
             {resumeSubjects.length > 0 && (
@@ -724,7 +761,7 @@ export default function Home() {
           }
 
           const teacher = teacherGender ?? "female";
-          const friend: TeacherGender = teacher === "female" ? "male" : "female";
+          const friend: CharacterKey = friendType ?? "friend_1";
           const bubbleChar = msg.isBranch ? friend : teacher;
           return (
             <div key={i}>

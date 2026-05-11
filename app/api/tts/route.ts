@@ -2,11 +2,14 @@ import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const VOICES = {
-  sensei: "ja-JP-NanamiNeural",
-  tomo: "ja-JP-AoiNeural",
-  female: "ja-JP-NanamiNeural",
-  male: "ja-JP-KeitaNeural",
+const VOICES: Record<string, string> = {
+  sensei:   "ja-JP-NanamiNeural",
+  tomo:     "ja-JP-AoiNeural",
+  female:   "ja-JP-NanamiNeural",
+  male:     "ja-JP-KeitaNeural",
+  friend_1: "ja-JP-AoiNeural",
+  friend_2: "ja-JP-DaichiNeural",
+  friend_3: "ja-JP-ShioriNeural",
 };
 
 export async function POST(request: NextRequest) {

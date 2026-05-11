@@ -3,8 +3,18 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 
+export type CharacterKey = 'female' | 'male' | 'friend_1' | 'friend_2' | 'friend_3'
+
+const CHARACTER_INFO: Record<CharacterKey, { prefix: string; label: string }> = {
+  female:   { prefix: 'sensei_f', label: '女の先生' },
+  male:     { prefix: 'sensei_m', label: '男の先生' },
+  friend_1: { prefix: 'friend_1', label: 'ともこ' },
+  friend_2: { prefix: 'friend_2', label: 'けんた' },
+  friend_3: { prefix: 'friend_3', label: 'エイリアン' },
+}
+
 type Props = {
-  character: 'female' | 'male'
+  character: CharacterKey
   talking?: boolean
   size?: number
 }
@@ -18,13 +28,13 @@ export function CharacterAvatar({ character, talking = false, size = 64 }: Props
     return () => clearInterval(interval)
   }, [talking])
 
-  const prefix = character === 'female' ? 'sensei_f' : 'sensei_m'
+  const { prefix, label } = CHARACTER_INFO[character]
   const src = `/characters/${prefix}_${mouthOpen ? 'open' : 'closed'}.png`
 
   return (
     <Image
       src={src}
-      alt={character === 'female' ? '女の先生' : '男の先生'}
+      alt={label}
       width={size}
       height={size}
       style={{ objectFit: 'contain' }}
