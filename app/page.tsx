@@ -91,6 +91,8 @@ export default function Home() {
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
 
+  const [theme, setTheme] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   // "idle" | "thinking"（即時応答待ち） | "checking"（Judge待ち）
@@ -154,29 +156,71 @@ export default function Home() {
     setPhase("subject");
   }
 
-  async function handleSubjectSelect(s: string) {
+  function handleSubjectSelect(s: string) {
     unlockSpeech();
     setSubject(s);
-    const subjectEmoji = SUBJECTS.find((sub) => sub.id === s)?.emoji ?? "";
-    const introMessages: Message[] = [
-      {
-        role: "agent",
-        text: `${subjectEmoji} ${s}について一緒に考えよう！なんでも気になることがあったら話しかけてね！`,
-      },
-      {
-        role: "agent",
-        text: `やっほー！${s}か〜！わたしも一緒に考えるね！`,
-      },
-    ];
-    setMessages(introMessages);
     setPhase("character");
+  }
+
+  async function startChat(mode: CharacterMode, selectedSubject: string) {
+    setCharacterMode(mode);
+    setPhase("chat");
+    setLoadingPhase("thinking");
+
+    let introMessages: Message[] = [];
+    let introTheme = selectedSubject;
+
+    try {
+      const res = await fetch("/api/intro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: mode }),
+      });
+      const data = await res.json();
+      introTheme = data.theme ?? selectedSubject;
+
+      if (mode === "sensei") {
+        introMessages = [{ role: "agent", text: data.senseiLine }];
+      } else if (mode === "tomo") {
+        introMessages = [{ role: "agent", text: data.tomoLine }];
+      } else {
+        introMessages = [
+          { role: "agent", text: data.senseiLine },
+          { role: "agent", text: data.tomoLine },
+        ];
+      }
+    } catch {
+      const subjectEmoji = SUBJECTS.find((s) => s.id === selectedSubject)?.emoji ?? "";
+      introMessages = [{ role: "agent", text: `${subjectEmoji} ${selectedSubject}について一緒に考えよう！` }];
+    }
+
+    setTheme(introTheme);
+    setMessages(introMessages);
+    setLoadingPhase("idle");
 
     if (studentId) {
       const supabase = createClient();
       const { data } = await supabase.from("conversations")
-        .insert({ student_id: studentId, grade, subject: s, messages: introMessages })
+        .insert({ student_id: studentId, grade, subject: selectedSubject, messages: introMessages })
         .select("id").single();
       setConversationId(data?.id ?? null);
+    }
+
+    // TTS で読み上げ
+    setSpeaking(true);
+    try {
+      const firstChar = mode === "tomo" ? "tomo" : "sensei";
+      setTalkingChar(firstChar);
+      await speakText(introMessages[0].text, firstChar);
+      setTalkingChar(null);
+      if (mode === "both" && introMessages[1]) {
+        setTalkingChar("tomo");
+        await speakText(introMessages[1].text, "tomo");
+        setTalkingChar(null);
+      }
+    } finally {
+      setSpeaking(false);
+      setTalkingChar(null);
     }
   }
 
@@ -597,7 +641,7 @@ export default function Home() {
           {options.map(({ mode, label, sub, emoji, color }) => (
             <button
               key={mode}
-              onClick={() => { setCharacterMode(mode); setPhase("chat"); }}
+              onClick={() => startChat(mode, subject!)}
               className={`bg-white border-2 ${color} rounded-2xl px-6 py-5 flex items-center gap-4 shadow-md transition-all active:scale-95`}
             >
               <div className="flex gap-1 flex-shrink-0">
@@ -663,6 +707,13 @@ export default function Home() {
 
       {/* メッセージ */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {theme && (
+          <div className="flex justify-center pt-1 pb-2">
+            <span className="bg-white/80 text-green-700 text-xs font-bold px-4 py-1.5 rounded-full shadow-sm border border-green-200">
+              📚 今日のテーマ：{theme}
+            </span>
+          </div>
+        )}
         {messages.map((msg, i) => {
           if (msg.role === "child") {
             return (
