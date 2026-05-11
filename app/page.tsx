@@ -541,17 +541,6 @@ export default function Home() {
         </div>
         <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">知識のネットワークを広げよう</p>
 
-        <div className="flex gap-6 sm:gap-10 mb-6 sm:mb-10">
-          <div className="flex flex-col items-center gap-2">
-            <CharacterAvatar character="female" size={68} />
-            <span className="text-sm font-bold text-pink-600">女の先生</span>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <CharacterAvatar character="male" size={68} />
-            <span className="text-sm font-bold text-blue-600">男の先生</span>
-          </div>
-        </div>
-
         <p className="text-gray-700 text-lg sm:text-xl mb-4 sm:mb-6 font-medium">何年生ですか？</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 w-full max-w-xs sm:max-w-none">
           {GRADE_LABELS.map((label, i) => (
