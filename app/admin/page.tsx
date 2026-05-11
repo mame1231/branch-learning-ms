@@ -29,7 +29,7 @@ function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)]
-  return code + '-' + Math.floor(100 + Math.random() * 900)
+  return code + Math.floor(100 + Math.random() * 900)
 }
 
 export default function AdminPage() {
