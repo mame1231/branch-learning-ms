@@ -8,8 +8,8 @@ import { createClient } from "@/lib/supabase";
 
 type Profile = { nickname: string | null; avatar_url: string | null };
 
-type Phase = "welcome" | "grade" | "subject" | "resume" | "character" | "chat";
-type CharacterMode = "female" | "male" | "both";
+type Phase = "welcome" | "grade" | "subject" | "resume" | "chat";
+type TeacherGender = "female" | "male";
 
 type SavedConversation = {
   id: string
@@ -87,7 +87,7 @@ export default function Home() {
 
   const [phase, setPhase] = useState<Phase>("welcome");
   const [savedConversations, setSavedConversations] = useState<Record<string, SavedConversation>>({});
-  const [characterMode, setCharacterMode] = useState<CharacterMode>("both");
+  const [teacherGender, setTeacherGender] = useState<TeacherGender | null>(null);
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
 
@@ -112,6 +112,8 @@ export default function Home() {
     const id = localStorage.getItem("student_id");
     if (!id) { router.push("/login"); return; }
     setStudentId(id);
+    const savedTeacher = localStorage.getItem("teacher_gender") as TeacherGender | null;
+    if (savedTeacher) setTeacherGender(savedTeacher);
     const supabase = createClient();
 
     supabase.from("profiles").select("nickname, avatar_url").eq("id", id).single()
@@ -160,18 +162,24 @@ export default function Home() {
     setPhase("subject");
   }
 
+  function selectTeacher(gender: TeacherGender) {
+    localStorage.setItem("teacher_gender", gender);
+    setTeacherGender(gender);
+  }
+
   function handleSubjectSelect(s: string) {
     unlockSpeech();
     setSubject(s);
     if (savedConversations[s]) {
       setPhase("resume");
     } else {
-      setPhase("character");
+      startChat(s);
     }
   }
 
-  async function startChat(mode: CharacterMode, selectedSubject: string) {
-    setCharacterMode(mode);
+  async function startChat(selectedSubject: string) {
+    const teacher = teacherGender ?? "female";
+    const friend: TeacherGender = teacher === "female" ? "male" : "female";
     setPhase("chat");
     setLoadingPhase("thinking");
 
@@ -182,21 +190,14 @@ export default function Home() {
       const res = await fetch("/api/intro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: mode }),
+        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: "both" }),
       });
       const data = await res.json();
       introTheme = data.theme ?? selectedSubject;
-
-      if (mode === "female") {
-        introMessages = [{ role: "agent", text: data.senseiLine }];
-      } else if (mode === "male") {
-        introMessages = [{ role: "agent", text: data.tomoLine }];
-      } else {
-        introMessages = [
-          { role: "agent", text: data.senseiLine },
-          { role: "agent", text: data.tomoLine },
-        ];
-      }
+      introMessages = [
+        { role: "agent", text: data.senseiLine },
+        { role: "agent", text: data.tomoLine },
+      ];
     } catch {
       const subjectEmoji = SUBJECTS.find((s) => s.id === selectedSubject)?.emoji ?? "";
       introMessages = [{ role: "agent", text: `${subjectEmoji} ${selectedSubject}について一緒に考えよう！` }];
@@ -217,13 +218,12 @@ export default function Home() {
     // TTS で読み上げ
     setSpeaking(true);
     try {
-      const firstChar: "female" | "male" = mode === "male" ? "male" : "female";
-      setTalkingChar(firstChar);
-      await speakText(introMessages[0].text, firstChar);
+      setTalkingChar(teacher);
+      await speakText(introMessages[0].text, teacher);
       setTalkingChar(null);
-      if (mode === "both" && introMessages[1]) {
-        setTalkingChar("male");
-        await speakText(introMessages[1].text, "male");
+      if (introMessages[1]) {
+        setTalkingChar(friend);
+        await speakText(introMessages[1].text, friend);
         setTalkingChar(null);
       }
     } finally {
@@ -240,13 +240,15 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "child", text }]);
     setLoadingPhase("thinking");
 
-    const speechItems: Array<{ text: string; char: "female" | "male" }> = [];
+    const teacher = teacherGender ?? "female";
+    const friend: TeacherGender = teacher === "female" ? "male" : "female";
+    const speechItems: Array<{ text: string; char: TeacherGender }> = [];
 
     try {
       const res = await fetch("/api/branch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, grade, subject, characterMode, studentId, conversationId }),
+        body: JSON.stringify({ message: text, grade, subject, characterMode: "both", studentId, conversationId }),
       });
 
       const reader = res.body!.getReader();
@@ -268,12 +270,12 @@ export default function Home() {
           if (chunk.type === "done") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
             setLoadingPhase("idle");
-            speechItems.push({ text: chunk.text, char: "female" });
+            speechItems.push({ text: chunk.text, char: teacher });
 
           } else if (chunk.type === "immediate") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
             setLoadingPhase("checking");
-            speechItems.push({ text: chunk.text, char: "female" });
+            speechItems.push({ text: chunk.text, char: teacher });
 
           } else if (chunk.type === "branch") {
             setLoadingPhase("idle");
@@ -287,11 +289,11 @@ export default function Home() {
                   branchLabel: randomBranchLabel(),
                 },
               ]);
-              speechItems.push({ text: chunk.childFacingSummary, char: "male" });
+              speechItems.push({ text: chunk.childFacingSummary, char: friend });
             } else if (chunk.judgeStatus === "judge_rejected") {
               const rejMsg = "その問い、すごく面白いんだけど、今すぐ正しい答えが確認できなかったんだ。メンターの先生に聞いてみようね！";
               setMessages((prev) => [...prev, { role: "agent", text: rejMsg }]);
-              speechItems.push({ text: rejMsg, char: "female" });
+              speechItems.push({ text: rejMsg, char: teacher });
             }
 
           } else if (chunk.type === "error") {
@@ -314,17 +316,10 @@ export default function Home() {
     // 会話ログ保存
     setMessages((prev) => { saveMessages(prev); return prev; });
 
-    // TTS: キャラクターモードに合わせて読み上げキャラを決定
-    const effectiveItems = speechItems.map((item) => ({
-      ...item,
-      char: characterMode === "female" ? "female" as const
-          : characterMode === "male"   ? "male"   as const
-          : item.char,
-    }));
-    if (effectiveItems.length > 0) {
+    if (speechItems.length > 0) {
       setSpeaking(true);
       try {
-        for (const item of effectiveItems) {
+        for (const item of speechItems) {
           setTalkingChar(item.char);
           await speakText(item.text, item.char);
           setTalkingChar(null);
@@ -449,33 +444,59 @@ export default function Home() {
         </div>
         <p className="text-green-600 mb-6 text-sm">おかえり、{profile.nickname ?? ""}！</p>
 
-        <div className="flex gap-4 mb-6">
-          <CharacterAvatar character="female" size={68} />
-          <CharacterAvatar character="male" size={68} />
-        </div>
-
-        {resumeSubjects.length > 0 && (
-          <div className="w-full max-w-sm mb-4">
-            <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {resumeSubjects.map((s) => {
-                const info = SUBJECTS.find((sub) => sub.id === s);
-                return (
-                  <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
-                    {info?.emoji} {s}
+        {/* 先生選択 */}
+        {!teacherGender ? (
+          <>
+            <p className="text-gray-700 font-bold mb-4">どっちの先生と話す？</p>
+            <div className="flex gap-4 mb-6">
+              {(["female", "male"] as TeacherGender[]).map((g) => (
+                <button key={g} onClick={() => selectTeacher(g)}
+                  className="flex flex-col items-center gap-2 bg-white rounded-2xl px-6 py-4 shadow-md border-2 border-green-200 hover:border-green-400 active:scale-95 transition-all">
+                  <CharacterAvatar character={g} size={80} />
+                  <span className={`text-sm font-bold ${g === "female" ? "text-pink-600" : "text-blue-600"}`}>
+                    {g === "female" ? "女の先生" : "男の先生"}
                   </span>
-                );
-              })}
+                </button>
+              ))}
             </div>
-          </div>
-        )}
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <CharacterAvatar character={teacherGender} size={100} />
+              <p className={`font-bold mt-2 ${teacherGender === "female" ? "text-pink-600" : "text-blue-600"}`}>
+                {teacherGender === "female" ? "女の先生" : "男の先生"}
+              </p>
+              <button onClick={() => { localStorage.removeItem("teacher_gender"); setTeacherGender(null); }}
+                className="text-xs text-gray-400 hover:text-gray-600 mt-1 underline">
+                変える
+              </button>
+            </div>
 
-        <button
-          onClick={() => setPhase("grade")}
-          className="bg-green-500 text-white font-bold py-4 px-10 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
-        >
-          はじめる →
-        </button>
+            {resumeSubjects.length > 0 && (
+              <div className="w-full max-w-sm mb-4">
+                <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {resumeSubjects.map((s) => {
+                    const info = SUBJECTS.find((sub) => sub.id === s);
+                    return (
+                      <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
+                        {info?.emoji} {s}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setPhase("grade")}
+              className="bg-green-500 text-white font-bold py-4 px-10 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
+            >
+              はじめる →
+            </button>
+          </>
+        )}
 
         <button
           onClick={() => { localStorage.removeItem("student_id"); router.push("/login"); }}
@@ -635,7 +656,7 @@ export default function Home() {
               setMessages(saved.messages);
               setConversationId(saved.id);
               setTheme(null);
-              setPhase("character");
+              setPhase("chat");
             }}
             className="bg-green-500 text-white font-bold py-4 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
           >
@@ -646,67 +667,12 @@ export default function Home() {
               setMessages([]);
               setConversationId(null);
               setTheme(null);
-              setPhase("character");
+              startChat(subject);
             }}
             className="bg-white border-2 border-green-400 text-green-700 font-bold py-4 rounded-2xl hover:bg-green-50 transition-all shadow-sm active:scale-95 text-lg"
           >
             はじめから
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── キャラクター選択 ──────────────────────────────────────
-  if (phase === "character") {
-    const options: { mode: CharacterMode; label: string; sub: string; color: string }[] = [
-      { mode: "female", label: "女の先生", sub: "やさしく、ていねいに教えてくれる", color: "border-pink-300 hover:bg-pink-50" },
-      { mode: "male",   label: "男の先生", sub: "わかりやすく、一緒に考えてくれる", color: "border-blue-300 hover:bg-blue-50" },
-      { mode: "both",   label: "ふたり",   sub: "2人の先生と話す",                  color: "border-purple-300 hover:bg-purple-50" },
-    ];
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-4 sm:p-8">
-        <button
-          onClick={() => setPhase("subject")}
-          className="absolute top-5 left-5 text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-medium"
-        >
-          ← 教科えらびにもどる
-        </button>
-        <button
-          onClick={() => router.push("/profile")}
-          className="absolute top-4 right-4 flex flex-col items-center gap-1"
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-green-200 flex items-center justify-center border-2 border-green-400">
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-              : <span className="text-xl">👤</span>}
-          </div>
-          <span className="text-xs text-green-600 font-medium">プロフィール</span>
-        </button>
-
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-3xl">🌿</span>
-          <h1 className="text-2xl sm:text-3xl font-bold text-green-800">ブランチラーニング 🌿</h1>
-        </div>
-        <p className="text-green-600 mb-8 text-sm">だれと話す？</p>
-
-        <div className="flex flex-col gap-4 w-full max-w-xs">
-          {options.map(({ mode, label, sub, color }) => (
-            <button
-              key={mode}
-              onClick={() => startChat(mode, subject!)}
-              className={`bg-white border-2 ${color} rounded-2xl px-5 py-4 flex items-center gap-4 shadow-md transition-all active:scale-95`}
-            >
-              <div className="flex gap-1 flex-shrink-0">
-                {(mode === "female" || mode === "both") && <CharacterAvatar character="female" size={52} />}
-                {(mode === "male"   || mode === "both") && <CharacterAvatar character="male"   size={52} />}
-              </div>
-              <div className="text-left">
-                <p className="font-bold text-gray-800 text-lg">{label}</p>
-                <p className="text-sm text-gray-500">{sub}</p>
-              </div>
-            </button>
-          ))}
         </div>
       </div>
     );
@@ -768,23 +734,28 @@ export default function Home() {
             );
           }
 
-          const bubbleChar = characterMode === "male" ? "male" : "female";
+          const teacher = teacherGender ?? "female";
+          const friend: TeacherGender = teacher === "female" ? "male" : "female";
+          const bubbleChar = msg.isBranch ? friend : teacher;
           return (
             <div key={i}>
               {msg.isBranch ? (
-                <div className="ml-14 mt-2 bg-gradient-to-r from-green-50 to-yellow-50 border-2 border-green-300 rounded-2xl px-4 py-3 max-w-[75%] sm:max-w-sm shadow-sm">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className="text-base">🌿</span>
-                    <span className="text-xs font-bold text-green-700 tracking-wider uppercase">
-                      {msg.branchLabel}
-                    </span>
+                <div className="flex items-end gap-2">
+                  <div className="flex-shrink-0">
+                    <CharacterAvatar character={friend} size={52} />
                   </div>
-                  <p className="text-sm text-green-900 italic">{msg.text}</p>
+                  <div className="bg-gradient-to-r from-green-50 to-yellow-50 border-2 border-green-300 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[72%] sm:max-w-sm shadow-sm">
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className="text-xs">🌿</span>
+                      <span className="text-xs font-bold text-green-700">{msg.branchLabel}</span>
+                    </div>
+                    <p className="text-sm text-green-900">{msg.text}</p>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-end gap-2">
                   <div className="flex-shrink-0">
-                    <CharacterAvatar character={bubbleChar} size={52} />
+                    <CharacterAvatar character={teacher} size={52} />
                   </div>
                   <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-bl-sm max-w-[72%] sm:max-w-sm text-sm shadow">
                     {msg.text}
@@ -797,7 +768,7 @@ export default function Home() {
 
         {loadingPhase === "thinking" && (
           <div className="flex items-end gap-2">
-            <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={52} />
+            <CharacterAvatar character={teacherGender ?? "female"} size={52} />
             <div className="bg-green-100 px-4 py-3 rounded-2xl text-sm text-green-800 flex items-center gap-2">
               <span className="animate-pulse">🌿</span>
               <span>ブランチを探してるよ...</span>
