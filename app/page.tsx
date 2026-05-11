@@ -742,21 +742,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* キャラクターエリア（デスクトップのみ表示） */}
-      <div className="hidden sm:flex bg-white border-b border-green-100 px-4 py-3 items-end justify-center gap-8">
-        {(characterMode === "female" || characterMode === "both") && (
-          <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="female" size={80} talking={talkingChar === "female"} />
-            <span className="text-xs font-bold text-pink-600">女の先生</span>
-          </div>
-        )}
-        {(characterMode === "male" || characterMode === "both") && (
-          <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="male" size={80} talking={talkingChar === "male"} />
-            <span className="text-xs font-bold text-blue-600">男の先生</span>
-          </div>
-        )}
-      </div>
 
       {/* メッセージ */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -774,7 +759,7 @@ export default function Home() {
                 <div className="bg-blue-500 text-white px-4 py-3 rounded-2xl rounded-tr-sm max-w-[78%] sm:max-w-sm text-sm shadow">
                   {msg.text}
                 </div>
-                <div className="animate-float w-9 h-9 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border-2 border-white shadow-md">
+                <div className="w-9 h-9 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border-2 border-white shadow-md">
                   {profile.avatar_url
                     ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                     : <span className="text-lg">👤</span>}
