@@ -5,6 +5,8 @@ export const dynamic = "force-dynamic";
 const VOICES = {
   sensei: "ja-JP-NanamiNeural",
   tomo: "ja-JP-AoiNeural",
+  female: "ja-JP-NanamiNeural",
+  male: "ja-JP-KeitaNeural",
 };
 
 export async function POST(request: NextRequest) {
@@ -22,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   const voice = VOICES[character as keyof typeof VOICES] ?? VOICES.sensei;
-  const rate = character === "tomo" ? "1.15" : "1.05";
+  const rate = (character === "tomo" || character === "male") ? "1.1" : "1.05";
 
   const ssml = `
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="ja-JP">

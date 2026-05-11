@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase";
 type Profile = { nickname: string | null; avatar_url: string | null };
 
 type Phase = "welcome" | "grade" | "subject" | "resume" | "character" | "chat";
-type CharacterMode = "sensei" | "tomo" | "both";
+type CharacterMode = "female" | "male" | "both";
 
 type SavedConversation = {
   id: string
@@ -52,7 +52,7 @@ function unlockAudio() {
   if (ctx.state === "suspended") ctx.resume();
 }
 
-function speakText(text: string, character: "sensei" | "tomo"): Promise<void> {
+function speakText(text: string, character: string): Promise<void> {
   return new Promise(async (resolve) => {
     if (currentSource) { currentSource.stop(); currentSource = null; }
     try {
@@ -99,7 +99,7 @@ export default function Home() {
   const [loadingPhase, setLoadingPhase] = useState<"idle" | "thinking" | "checking">("idle");
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [talkingChar, setTalkingChar] = useState<"sensei" | "tomo" | null>(null);
+  const [talkingChar, setTalkingChar] = useState<"female" | "male" | null>(null);
   const [interimText, setInterimText] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -187,9 +187,9 @@ export default function Home() {
       const data = await res.json();
       introTheme = data.theme ?? selectedSubject;
 
-      if (mode === "sensei") {
+      if (mode === "female") {
         introMessages = [{ role: "agent", text: data.senseiLine }];
-      } else if (mode === "tomo") {
+      } else if (mode === "male") {
         introMessages = [{ role: "agent", text: data.tomoLine }];
       } else {
         introMessages = [
@@ -217,13 +217,13 @@ export default function Home() {
     // TTS で読み上げ
     setSpeaking(true);
     try {
-      const firstChar = mode === "tomo" ? "tomo" : "sensei";
+      const firstChar: "female" | "male" = mode === "male" ? "male" : "female";
       setTalkingChar(firstChar);
       await speakText(introMessages[0].text, firstChar);
       setTalkingChar(null);
       if (mode === "both" && introMessages[1]) {
-        setTalkingChar("tomo");
-        await speakText(introMessages[1].text, "tomo");
+        setTalkingChar("male");
+        await speakText(introMessages[1].text, "male");
         setTalkingChar(null);
       }
     } finally {
@@ -240,7 +240,7 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "child", text }]);
     setLoadingPhase("thinking");
 
-    const speechItems: Array<{ text: string; char: "sensei" | "tomo" }> = [];
+    const speechItems: Array<{ text: string; char: "female" | "male" }> = [];
 
     try {
       const res = await fetch("/api/branch", {
@@ -268,12 +268,12 @@ export default function Home() {
           if (chunk.type === "done") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
             setLoadingPhase("idle");
-            speechItems.push({ text: chunk.text, char: "sensei" });
+            speechItems.push({ text: chunk.text, char: "female" });
 
           } else if (chunk.type === "immediate") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
             setLoadingPhase("checking");
-            speechItems.push({ text: chunk.text, char: "sensei" });
+            speechItems.push({ text: chunk.text, char: "female" });
 
           } else if (chunk.type === "branch") {
             setLoadingPhase("idle");
@@ -287,11 +287,11 @@ export default function Home() {
                   branchLabel: randomBranchLabel(),
                 },
               ]);
-              speechItems.push({ text: chunk.childFacingSummary, char: "tomo" });
+              speechItems.push({ text: chunk.childFacingSummary, char: "male" });
             } else if (chunk.judgeStatus === "judge_rejected") {
               const rejMsg = "その問い、すごく面白いんだけど、今すぐ正しい答えが確認できなかったんだ。メンターの先生に聞いてみようね！";
               setMessages((prev) => [...prev, { role: "agent", text: rejMsg }]);
-              speechItems.push({ text: rejMsg, char: "sensei" });
+              speechItems.push({ text: rejMsg, char: "female" });
             }
 
           } else if (chunk.type === "error") {
@@ -317,8 +317,8 @@ export default function Home() {
     // TTS: キャラクターモードに合わせて読み上げキャラを決定
     const effectiveItems = speechItems.map((item) => ({
       ...item,
-      char: characterMode === "sensei" ? "sensei" as const
-          : characterMode === "tomo"   ? "tomo"   as const
+      char: characterMode === "female" ? "female" as const
+          : characterMode === "male"   ? "male"   as const
           : item.char,
     }));
     if (effectiveItems.length > 0) {
@@ -450,8 +450,8 @@ export default function Home() {
         <p className="text-green-600 mb-6 text-sm">おかえり、{profile.nickname ?? ""}！</p>
 
         <div className="flex gap-4 mb-6">
-          <CharacterAvatar character="sensei" size={68} />
-          <CharacterAvatar character="tomo" size={68} />
+          <CharacterAvatar character="female" size={68} />
+          <CharacterAvatar character="male" size={68} />
         </div>
 
         {resumeSubjects.length > 0 && (
@@ -522,12 +522,12 @@ export default function Home() {
 
         <div className="flex gap-6 sm:gap-10 mb-6 sm:mb-10">
           <div className="flex flex-col items-center gap-2">
-            <CharacterAvatar character="sensei" size={68} />
-            <span className="text-sm font-bold text-green-700">せんせい</span>
+            <CharacterAvatar character="female" size={68} />
+            <span className="text-sm font-bold text-pink-600">女の先生</span>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <CharacterAvatar character="tomo" size={68} />
-            <span className="text-sm font-bold text-orange-500">ともだち</span>
+            <CharacterAvatar character="male" size={68} />
+            <span className="text-sm font-bold text-blue-600">男の先生</span>
           </div>
         </div>
 
@@ -659,10 +659,10 @@ export default function Home() {
 
   // ── キャラクター選択 ──────────────────────────────────────
   if (phase === "character") {
-    const options: { mode: CharacterMode; label: string; sub: string; emoji: string; color: string }[] = [
-      { mode: "sensei", label: "せんせい", sub: "ていねいに教えてくれる", emoji: "🎓", color: "border-green-400 hover:bg-green-50" },
-      { mode: "tomo",   label: "ともだち", sub: "一緒にワクワクする",    emoji: "✨", color: "border-orange-400 hover:bg-orange-50" },
-      { mode: "both",   label: "ふたり",   sub: "両方と話す",            emoji: "🌿", color: "border-purple-400 hover:bg-purple-50" },
+    const options: { mode: CharacterMode; label: string; sub: string; color: string }[] = [
+      { mode: "female", label: "女の先生", sub: "やさしく、ていねいに教えてくれる", color: "border-pink-300 hover:bg-pink-50" },
+      { mode: "male",   label: "男の先生", sub: "わかりやすく、一緒に考えてくれる", color: "border-blue-300 hover:bg-blue-50" },
+      { mode: "both",   label: "ふたり",   sub: "2人の先生と話す",                  color: "border-purple-300 hover:bg-purple-50" },
     ];
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-4 sm:p-8">
@@ -691,18 +691,18 @@ export default function Home() {
         <p className="text-green-600 mb-8 text-sm">だれと話す？</p>
 
         <div className="flex flex-col gap-4 w-full max-w-xs">
-          {options.map(({ mode, label, sub, emoji, color }) => (
+          {options.map(({ mode, label, sub, color }) => (
             <button
               key={mode}
               onClick={() => startChat(mode, subject!)}
-              className={`bg-white border-2 ${color} rounded-2xl px-6 py-5 flex items-center gap-4 shadow-md transition-all active:scale-95`}
+              className={`bg-white border-2 ${color} rounded-2xl px-5 py-4 flex items-center gap-4 shadow-md transition-all active:scale-95`}
             >
               <div className="flex gap-1 flex-shrink-0">
-                {(mode === "sensei" || mode === "both") && <CharacterAvatar character="sensei" size={52} />}
-                {(mode === "tomo"   || mode === "both") && <CharacterAvatar character="tomo"   size={52} />}
+                {(mode === "female" || mode === "both") && <CharacterAvatar character="female" size={52} />}
+                {(mode === "male"   || mode === "both") && <CharacterAvatar character="male"   size={52} />}
               </div>
               <div className="text-left">
-                <p className="font-bold text-gray-800 text-lg">{emoji} {label}</p>
+                <p className="font-bold text-gray-800 text-lg">{label}</p>
                 <p className="text-sm text-gray-500">{sub}</p>
               </div>
             </button>
@@ -744,16 +744,16 @@ export default function Home() {
 
       {/* キャラクターエリア（デスクトップのみ表示） */}
       <div className="hidden sm:flex bg-white border-b border-green-100 px-4 py-3 items-end justify-center gap-8">
-        {(characterMode === "sensei" || characterMode === "both") && (
+        {(characterMode === "female" || characterMode === "both") && (
           <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="sensei" size={72} talking={talkingChar === "sensei"} />
-            <span className="text-xs font-bold text-green-700">せんせい</span>
+            <CharacterAvatar character="female" size={80} talking={talkingChar === "female"} />
+            <span className="text-xs font-bold text-pink-600">女の先生</span>
           </div>
         )}
-        {(characterMode === "tomo" || characterMode === "both") && (
+        {(characterMode === "male" || characterMode === "both") && (
           <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="tomo" size={72} talking={talkingChar === "tomo"} />
-            <span className="text-xs font-bold text-orange-500">ともだち</span>
+            <CharacterAvatar character="male" size={80} talking={talkingChar === "male"} />
+            <span className="text-xs font-bold text-blue-600">男の先生</span>
           </div>
         )}
       </div>
@@ -798,9 +798,9 @@ export default function Home() {
               ) : (
                 <div className="flex items-start gap-2">
                   <div className="flex-shrink-0">
-                    <CharacterAvatar character="sensei" size={36} />
+                    <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={36} />
                   </div>
-                  <div className="bg-green-100 text-green-900 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[78%] sm:max-w-sm text-sm shadow">
+                  <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[78%] sm:max-w-sm text-sm shadow">
                     {msg.text}
                   </div>
                 </div>
@@ -811,7 +811,7 @@ export default function Home() {
 
         {loadingPhase === "thinking" && (
           <div className="flex items-center gap-2">
-            <CharacterAvatar character="sensei" size={36} />
+            <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={36} />
             <div className="bg-green-100 px-4 py-3 rounded-2xl text-sm text-green-800 flex items-center gap-2">
               <span className="animate-pulse">🌿</span>
               <span>ブランチを探してるよ...</span>
