@@ -774,7 +774,7 @@ export default function Home() {
                 <div className="bg-blue-500 text-white px-4 py-3 rounded-2xl rounded-tr-sm max-w-[78%] sm:max-w-sm text-sm shadow">
                   {msg.text}
                 </div>
-                <div className="w-8 h-8 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-green-200">
+                <div className="animate-float w-9 h-9 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border-2 border-white shadow-md">
                   {profile.avatar_url
                     ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                     : <span className="text-lg">👤</span>}
@@ -783,10 +783,11 @@ export default function Home() {
             );
           }
 
+          const bubbleChar = characterMode === "male" ? "male" : "female";
           return (
             <div key={i}>
               {msg.isBranch ? (
-                <div className="ml-11 mt-2 bg-gradient-to-r from-green-50 to-yellow-50 border-2 border-green-300 rounded-2xl px-4 py-3 max-w-[78%] sm:max-w-sm shadow-sm">
+                <div className="ml-14 mt-2 bg-gradient-to-r from-green-50 to-yellow-50 border-2 border-green-300 rounded-2xl px-4 py-3 max-w-[75%] sm:max-w-sm shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <span className="text-base">🌿</span>
                     <span className="text-xs font-bold text-green-700 tracking-wider uppercase">
@@ -796,11 +797,11 @@ export default function Home() {
                   <p className="text-sm text-green-900 italic">{msg.text}</p>
                 </div>
               ) : (
-                <div className="flex items-start gap-2">
+                <div className="flex items-end gap-2">
                   <div className="flex-shrink-0">
-                    <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={36} />
+                    <CharacterAvatar character={bubbleChar} size={52} />
                   </div>
-                  <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[78%] sm:max-w-sm text-sm shadow">
+                  <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-bl-sm max-w-[72%] sm:max-w-sm text-sm shadow">
                     {msg.text}
                   </div>
                 </div>
@@ -810,8 +811,8 @@ export default function Home() {
         })}
 
         {loadingPhase === "thinking" && (
-          <div className="flex items-center gap-2">
-            <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={36} />
+          <div className="flex items-end gap-2">
+            <CharacterAvatar character={characterMode === "male" ? "male" : "female"} size={52} />
             <div className="bg-green-100 px-4 py-3 rounded-2xl text-sm text-green-800 flex items-center gap-2">
               <span className="animate-pulse">🌿</span>
               <span>ブランチを探してるよ...</span>
