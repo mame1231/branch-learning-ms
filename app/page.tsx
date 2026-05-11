@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase";
 
 type Profile = { nickname: string | null; avatar_url: string | null };
 
-type Phase = "welcome" | "grade" | "subject" | "character" | "chat";
+type Phase = "welcome" | "grade" | "subject" | "resume" | "character" | "chat";
 type CharacterMode = "sensei" | "tomo" | "both";
 
 type SavedConversation = {
@@ -86,7 +86,7 @@ export default function Home() {
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<Phase>("welcome");
-  const [savedConversation, setSavedConversation] = useState<SavedConversation | null>(null);
+  const [savedConversations, setSavedConversations] = useState<Record<string, SavedConversation>>({});
   const [characterMode, setCharacterMode] = useState<CharacterMode>("both");
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
@@ -124,14 +124,18 @@ export default function Home() {
       .select("id, grade, subject, messages, updated_at")
       .eq("student_id", id)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .single()
+      .limit(30)
       .then(({ data }) => {
-        if (data && (data.messages as Message[]).length > 1) {
-          setSavedConversation(data as SavedConversation);
-        } else {
-          setPhase("grade");
+        if (data) {
+          const map: Record<string, SavedConversation> = {};
+          for (const conv of data) {
+            if (!map[conv.subject] && (conv.messages as Message[]).length > 1) {
+              map[conv.subject] = conv as SavedConversation;
+            }
+          }
+          setSavedConversations(map);
         }
+        setPhase("grade");
       });
   }, [router]);
 
@@ -159,7 +163,11 @@ export default function Home() {
   function handleSubjectSelect(s: string) {
     unlockSpeech();
     setSubject(s);
-    setPhase("character");
+    if (savedConversations[s]) {
+      setPhase("resume");
+    } else {
+      setPhase("character");
+    }
   }
 
   async function startChat(mode: CharacterMode, selectedSubject: string) {
@@ -419,8 +427,9 @@ export default function Home() {
 
   const micDisabled = loadingPhase !== "idle" || speaking;
 
-  // ── ウェルカム（続きから／はじめから）──────────────────────
+  // ── ウェルカム ──────────────────────────────────────────
   if (phase === "welcome") {
+    const resumeSubjects = Object.keys(savedConversations);
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-8">
         <button
@@ -438,57 +447,35 @@ export default function Home() {
           <span className="text-4xl">🌿</span>
           <h1 className="text-3xl font-bold text-green-800">ブランチラーニング 🌿</h1>
         </div>
-        <p className="text-green-600 mb-8 text-sm">おかえり、{profile.nickname ?? ""}！</p>
+        <p className="text-green-600 mb-6 text-sm">おかえり、{profile.nickname ?? ""}！</p>
 
         <div className="flex gap-4 mb-6">
-          <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="sensei" size={68} />
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <CharacterAvatar character="tomo" size={68} />
-          </div>
+          <CharacterAvatar character="sensei" size={68} />
+          <CharacterAvatar character="tomo" size={68} />
         </div>
 
-        {savedConversation && (
-          <div className="w-full max-w-sm mb-4 bg-white rounded-2xl shadow p-4 border-2 border-green-200">
-            <p className="text-xs text-gray-400 mb-1">前回の続き</p>
-            <p className="font-bold text-green-800">
-              小学{savedConversation.grade}年生 ·{" "}
-              {SUBJECTS.find((s) => s.id === savedConversation.subject)?.emoji}{" "}
-              {toGradeDisplay(savedConversation.subject, savedConversation.grade)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-              {[...savedConversation.messages].reverse().find((m) => m.role === "agent")?.text ?? ""}
-            </p>
+        {resumeSubjects.length > 0 && (
+          <div className="w-full max-w-sm mb-4">
+            <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {resumeSubjects.map((s) => {
+                const info = SUBJECTS.find((sub) => sub.id === s);
+                return (
+                  <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
+                    {info?.emoji} {s}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         )}
 
-        <div className="flex flex-col gap-3 w-full max-w-sm">
-          {savedConversation && (
-            <button
-              onClick={() => {
-                setGrade(savedConversation.grade);
-                setSubject(savedConversation.subject);
-                setMessages(savedConversation.messages);
-                setConversationId(savedConversation.id);
-                setPhase("chat");
-              }}
-              className="bg-green-500 text-white font-bold py-4 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
-            >
-              🌿 続きからはじめる
-            </button>
-          )}
-          <button
-            onClick={() => setPhase("grade")}
-            className={`font-bold py-4 rounded-2xl transition-all shadow-md active:scale-95 text-lg ${
-              savedConversation
-                ? "bg-white border-2 border-green-400 text-green-700 hover:bg-green-50"
-                : "bg-green-500 text-white hover:bg-green-600"
-            }`}
-          >
-            {savedConversation ? "はじめから" : "はじめる →"}
-          </button>
-        </div>
+        <button
+          onClick={() => setPhase("grade")}
+          className="bg-green-500 text-white font-bold py-4 px-10 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
+        >
+          はじめる →
+        </button>
 
         <button
           onClick={() => { localStorage.removeItem("student_id"); router.push("/login"); }}
@@ -589,16 +576,82 @@ export default function Home() {
         <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">今日は何を学ぶ？</p>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm">
-          {SUBJECTS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => handleSubjectSelect(s.id)}
-              className="bg-white border-2 border-green-200 text-gray-700 font-bold py-3 sm:py-5 rounded-2xl hover:border-green-400 hover:bg-green-50 transition-all shadow-sm flex flex-col items-center gap-1 sm:gap-2 active:scale-95"
-            >
-              <span className="text-2xl sm:text-3xl">{s.emoji}</span>
-              <span className="text-xs sm:text-sm">{toGradeDisplay(s.id, grade!)}</span>
-            </button>
-          ))}
+          {SUBJECTS.map((s) => {
+            const hasSaved = !!savedConversations[s.id];
+            return (
+              <button
+                key={s.id}
+                onClick={() => handleSubjectSelect(s.id)}
+                className={`relative bg-white border-2 text-gray-700 font-bold py-3 sm:py-5 rounded-2xl hover:border-green-400 hover:bg-green-50 transition-all shadow-sm flex flex-col items-center gap-1 sm:gap-2 active:scale-95 ${
+                  hasSaved ? "border-green-400" : "border-green-200"
+                }`}
+              >
+                {hasSaved && (
+                  <span className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight">
+                    続き
+                  </span>
+                )}
+                <span className="text-2xl sm:text-3xl">{s.emoji}</span>
+                <span className="text-xs sm:text-sm">{toGradeDisplay(s.id, grade!)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 続きから／はじめから選択 ─────────────────────────────────
+  if (phase === "resume" && subject) {
+    const saved = savedConversations[subject];
+    const subjectInfo = SUBJECTS.find((s) => s.id === subject);
+    const lastAgentMsg = saved
+      ? [...saved.messages].reverse().find((m) => m.role === "agent")?.text ?? ""
+      : "";
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-6">
+        <button
+          onClick={() => setPhase("subject")}
+          className="absolute top-5 left-5 text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-medium"
+        >
+          ← 教科えらびにもどる
+        </button>
+
+        <div className="text-5xl mb-3">{subjectInfo?.emoji}</div>
+        <h2 className="text-xl font-bold text-green-800 mb-1">
+          {toGradeDisplay(subject, grade!)}
+        </h2>
+        <p className="text-sm text-green-600 mb-6">続きがあるよ！どうする？</p>
+
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-green-100 p-4 mb-6">
+          <p className="text-xs text-gray-400 mb-1">まえのトークのつづき</p>
+          <p className="text-sm text-gray-700 line-clamp-3">{lastAgentMsg}</p>
+        </div>
+
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button
+            onClick={() => {
+              if (!saved) return;
+              setMessages(saved.messages);
+              setConversationId(saved.id);
+              setTheme(null);
+              setPhase("character");
+            }}
+            className="bg-green-500 text-white font-bold py-4 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
+          >
+            🌿 続きからはじめる
+          </button>
+          <button
+            onClick={() => {
+              setMessages([]);
+              setConversationId(null);
+              setTheme(null);
+              setPhase("character");
+            }}
+            className="bg-white border-2 border-green-400 text-green-700 font-bold py-4 rounded-2xl hover:bg-green-50 transition-all shadow-sm active:scale-95 text-lg"
+          >
+            はじめから
+          </button>
         </div>
       </div>
     );
