@@ -7,7 +7,7 @@ import { searchEvidence, getAllEvidence } from "@/lib/tools/evidence";
 import { createServerClient } from "@/lib/supabase-server";
 
 export async function POST(request: NextRequest) {
-  const { message, grade, subject, characterMode, studentId, conversationId } = await request.json();
+  const { message, grade, subject, characterMode, teacherGender, studentId, conversationId } = await request.json();
 
   if (!message || typeof message !== "string") {
     return Response.json({ error: "message is required" }, { status: 400 });
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
   const gradeNum = typeof grade === "number" ? grade : 4;
   const subjectStr = typeof subject === "string" ? subject : "社会";
   const charMode = typeof characterMode === "string" ? characterMode : "both";
+  const teacher = typeof teacherGender === "string" ? teacherGender : "female";
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Step 1: Generator（速い）
-        const generated = await runGeneratorAgent(message, gradeNum, subjectStr, charMode);
+        const generated = await runGeneratorAgent(message, gradeNum, subjectStr, charMode, teacher);
 
         if (!generated.hasYokomichi) {
           send({
@@ -38,10 +39,12 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // 答え＋横道への導入を先に流す（Judge前）
-        const immediateText = [generated.answerWithBranch, generated.immediateResponse]
-          .filter(Boolean).join(" ");
-        send({ type: "immediate", text: immediateText });
+        // 先生の答えを先に流す（Judge前）
+        send({ type: "immediate", text: generated.answerWithBranch });
+        // 友達の反応：約40%の確率でのみ送る
+        if (generated.immediateResponse && Math.random() < 0.4) {
+          send({ type: "tomo_immediate", text: generated.immediateResponse });
+        }
 
         // Step 2: Evidence Tool + Judge Agent（少し遅い）
         let evidenceEntries = searchEvidence(generated.searchKeyword);
@@ -73,10 +76,14 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        const childFacing = approved && judged.childFacingSummary?.trim()
+          ? judged.childFacingSummary
+          : null;
+
         send({
           type: "branch",
-          judgeStatus: approved ? "judge_checked" : "judge_rejected",
-          childFacingSummary: approved ? judged.childFacingSummary : null,
+          judgeStatus: childFacing ? "judge_checked" : "judge_rejected",
+          childFacingSummary: childFacing,
           childQuestionSummary: generated.childQuestionSummary,
           evidenceIds: judged.evidenceIds,
         });

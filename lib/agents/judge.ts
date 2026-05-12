@@ -1,8 +1,6 @@
-import Groq from "groq-sdk";
+import { getLLMClient, getLLMModel } from "@/lib/llm";
 import type { EvidenceEntry } from "@/lib/tools/evidence";
 import { GRADE_CONFIG } from "@/lib/config/grades";
-
-function getGroq() { return new Groq({ apiKey: process.env.GROQ_API_KEY }); }
 
 export type JudgeStatus = "judge_checked" | "judge_rejected" | "revision_required";
 
@@ -61,8 +59,8 @@ export async function runJudgeAgent(
 
   const userMessage = `## ブランチ候補\n${branchCandidate}\n\n## Evidence\n${evidenceText}`;
 
-  const response = await getGroq().chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+  const response = await getLLMClient().chat.completions.create({
+    model: getLLMModel(),
     messages: [
       { role: "system", content: buildSystemPrompt(grade, subject) },
       { role: "user", content: userMessage },

@@ -10,7 +10,8 @@ export type EvidenceEntry = {
   last_checked_at: string;
 };
 
-export function searchEvidence(query: string): EvidenceEntry[] {
+export function searchEvidence(query: string | undefined): EvidenceEntry[] {
+  if (!query) return [];
   const q = query.toLowerCase();
   return (sources as EvidenceEntry[]).filter(
     (e) =>

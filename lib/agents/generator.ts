@@ -1,7 +1,5 @@
-import Groq from "groq-sdk";
+import { getLLMClient, getLLMModel } from "@/lib/llm";
 import { GRADE_CONFIG } from "@/lib/config/grades";
-
-function getGroq() { return new Groq({ apiKey: process.env.GROQ_API_KEY }); }
 
 export type GeneratorResult = {
   hasYokomichi: boolean;
@@ -13,9 +11,14 @@ export type GeneratorResult = {
   searchKeyword: string;
 };
 
-function buildCharacterGuide(characterMode: string): string {
+function teacherName(teacherGender: string): string {
+  return teacherGender === "male" ? "ゆうすけ先生" : "あゆみ先生";
+}
+
+function buildCharacterGuide(characterMode: string, teacherGender: string): string {
+  const name = teacherName(teacherGender);
   if (characterMode === "sensei") {
-    return `## あなたのキャラクター：Sensei
+    return `## あなたのキャラクター：${name}
 口調：「〜だよ」「〜なんだ」「〜してみよう」。温かく、でもはっきり教える先生。
 絵文字は使わない。落ち着いた雰囲気で知識を伝える。`;
   }
@@ -24,17 +27,17 @@ function buildCharacterGuide(characterMode: string): string {
 口調：タメ口。「えー！そうなの！？」「それめっちゃおもしろくない！？」「一緒に調べよ！」
 テンションは高め。自分も知らないふりをして一緒に驚く。絵文字を積極的に使う。`;
   }
-  return `## あなたのキャラクター：SenseiとTomo
-answerWithBranchはSenseiとして答える（丁寧に）。
+  return `## あなたのキャラクター：${name}とTomo
+answerWithBranchは${name}として答える（丁寧に）。
 immediateResponseはTomoとして反応する（「えー！おもしろい！」のようにテンション高く）。`;
 }
 
-function buildSystemPrompt(grade: number, subject: string, characterMode: string): string {
+function buildSystemPrompt(grade: number, subject: string, characterMode: string, teacherGender: string): string {
   const gradeConfig = GRADE_CONFIG[grade];
   return `あなたは小学${grade}年生の「${subject}」の授業をサポートするエージェントです。
 あなたの最大の使命は「横道の問い」を見つけ、子どもの知的好奇心を広げることです。
 
-${buildCharacterGuide(characterMode)}
+${buildCharacterGuide(characterMode, teacherGender)}
 
 ## 横道の問いとは
 子どもの発話の中に潜む、知識が別の分野・別のテーマへ広がる「枝分かれ」のこと。
@@ -78,12 +81,13 @@ export async function runGeneratorAgent(
   childMessage: string,
   grade: number,
   subject: string,
-  characterMode = "both"
+  characterMode = "both",
+  teacherGender = "female"
 ): Promise<GeneratorResult> {
-  const response = await getGroq().chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+  const response = await getLLMClient().chat.completions.create({
+    model: getLLMModel(),
     messages: [
-      { role: "system", content: buildSystemPrompt(grade, subject, characterMode) },
+      { role: "system", content: buildSystemPrompt(grade, subject, characterMode, teacherGender) },
       { role: "user", content: childMessage },
     ],
     response_format: { type: "json_object" },

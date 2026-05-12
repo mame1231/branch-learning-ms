@@ -7,7 +7,6 @@ import {
   type Edge,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react'
@@ -169,11 +168,6 @@ export default function KnowledgePage() {
           >
             <Background color="#e5e7eb" gap={20} />
             <Controls />
-            <MiniMap
-              nodeColor={(n) =>
-                n.id.startsWith('subject-') ? '#16a34a' : '#fbbf24'
-              }
-            />
           </ReactFlow>
         )}
       </div>

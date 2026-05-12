@@ -2,14 +2,16 @@ import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const VOICES: Record<string, string> = {
-  sensei:   "ja-JP-NanamiNeural",
-  tomo:     "ja-JP-AoiNeural",
-  female:   "ja-JP-NanamiNeural",
-  male:     "ja-JP-KeitaNeural",
-  friend_1: "ja-JP-AoiNeural",
-  friend_2: "ja-JP-DaichiNeural",
-  friend_3: "ja-JP-ShioriNeural",
+type VoiceProfile = { voice: string; rate: string; pitch: string };
+
+const VOICE_PROFILES: Record<string, VoiceProfile> = {
+  sensei:   { voice: "ja-JP-NanamiNeural",            rate: "1.05", pitch: "0%"   },
+  female:   { voice: "ja-JP-NanamiNeural",            rate: "1.05", pitch: "0%"   },
+  male:     { voice: "ja-JP-KeitaNeural",             rate: "1.1",  pitch: "0%"   },
+  tomo:     { voice: "ja-JP-AoiNeural",               rate: "1.15", pitch: "0%"   },
+  friend_1: { voice: "ja-JP-AoiNeural",               rate: "1.15", pitch: "0%"   },
+  friend_2: { voice: "ja-JP-NaokiNeural",             rate: "1.2",  pitch: "+18%" }, // けんた：元気な男の子
+  friend_3: { voice: "ja-JP-MasaruMultilingualNeural", rate: "1.05", pitch: "+45%" }, // エイリアン：宇宙人ぽい高音
 };
 
 export async function POST(request: NextRequest) {
@@ -26,13 +28,18 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "AZURE_SPEECH_KEY not set" }, { status: 500 });
   }
 
-  const voice = VOICES[character as keyof typeof VOICES] ?? VOICES.sensei;
-  const rate = (character === "tomo" || character === "male") ? "1.1" : "1.05";
+  const profile = VOICE_PROFILES[character as keyof typeof VOICE_PROFILES] ?? VOICE_PROFILES.sensei;
 
+  const cleanText = text
+    .replace(/\p{Emoji_Presentation}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const escaped = cleanText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const ssml = `
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="ja-JP">
-      <voice name="${voice}">
-        <prosody rate="${rate}">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</prosody>
+      <voice name="${profile.voice}">
+        <prosody rate="${profile.rate}" pitch="${profile.pitch}">${escaped}</prosody>
       </voice>
     </speak>
   `.trim();

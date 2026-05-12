@@ -6,8 +6,8 @@ import Image from 'next/image'
 export type CharacterKey = 'female' | 'male' | 'friend_1' | 'friend_2' | 'friend_3'
 
 const CHARACTER_INFO: Record<CharacterKey, { prefix: string; label: string }> = {
-  female:   { prefix: 'sensei_f', label: '女の先生' },
-  male:     { prefix: 'sensei_m', label: '男の先生' },
+  female:   { prefix: 'sensei_f', label: 'あゆみ先生' },
+  male:     { prefix: 'sensei_m', label: 'ゆうすけ先生' },
   friend_1: { prefix: 'friend_1', label: 'のぞみ' },
   friend_2: { prefix: 'friend_2', label: 'けんた' },
   friend_3: { prefix: 'friend_3', label: 'エイリアン' },

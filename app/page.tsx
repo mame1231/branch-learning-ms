@@ -8,15 +8,17 @@ import { createClient } from "@/lib/supabase";
 
 type Profile = { nickname: string | null; avatar_url: string | null };
 
-type Phase = "welcome" | "grade" | "subject" | "resume" | "chat";
+type Phase = "welcome" | "subject" | "resume" | "chat";
+type SettingSection = "grade" | "teacher" | "friend" | null;
 type TeacherGender = "female" | "male";
-type FriendType = "friend_1" | "friend_2" | "friend_3";
+type FriendType = "friend_1" | "friend_2";
 
 const FRIEND_OPTIONS: { type: FriendType; label: string }[] = [
   { type: "friend_1", label: "のぞみ" },
   { type: "friend_2", label: "けんた" },
-  { type: "friend_3", label: "エイリアン" },
 ];
+
+const BRANCH_CHARACTER = "friend_3" as const; // エイリアンは常に横道担当
 
 type SavedConversation = {
   id: string
@@ -99,6 +101,7 @@ export default function Home() {
   const [friendType, setFriendType] = useState<FriendType | null>(null);
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
+  const [settingSection, setSettingSection] = useState<SettingSection>(null);
 
   const [theme, setTheme] = useState<string | null>(null);
 
@@ -125,6 +128,8 @@ export default function Home() {
     if (savedTeacher) setTeacherGender(savedTeacher);
     const savedFriend = localStorage.getItem("friend_type") as FriendType | null;
     if (savedFriend) setFriendType(savedFriend);
+    const savedGrade = localStorage.getItem("grade");
+    if (savedGrade) setGrade(Number(savedGrade));
     const supabase = createClient();
 
     supabase.from("profiles").select("nickname, avatar_url").eq("id", id).single()
@@ -148,7 +153,7 @@ export default function Home() {
           }
           setSavedConversations(map);
         }
-        setPhase("grade");
+        setPhase("welcome");
       });
   }, [router]);
 
@@ -169,8 +174,8 @@ export default function Home() {
   }
 
   function handleGradeSelect(g: number) {
+    localStorage.setItem("grade", String(g));
     setGrade(g);
-    setPhase("subject");
   }
 
   function selectTeacher(gender: TeacherGender) {
@@ -206,7 +211,7 @@ export default function Home() {
       const res = await fetch("/api/intro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: "both" }),
+        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: "both", teacherGender: teacher }),
       });
       const data = await res.json();
       introTheme = data.theme ?? selectedSubject;
@@ -259,12 +264,13 @@ export default function Home() {
     const teacher = teacherGender ?? "female";
     const friend: CharacterKey = friendType ?? "friend_1";
     const speechItems: Array<{ text: string; char: CharacterKey }> = [];
+    let errorHandled = false;
 
     try {
       const res = await fetch("/api/branch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, grade, subject, characterMode: "both", studentId, conversationId }),
+        body: JSON.stringify({ message: text, grade, subject, characterMode: "both", teacherGender: teacher, studentId, conversationId }),
       });
 
       const reader = res.body!.getReader();
@@ -293,6 +299,10 @@ export default function Home() {
             setLoadingPhase("checking");
             speechItems.push({ text: chunk.text, char: teacher });
 
+          } else if (chunk.type === "tomo_immediate") {
+            setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: friend }]);
+            speechItems.push({ text: chunk.text, char: friend });
+
           } else if (chunk.type === "branch") {
             setLoadingPhase("idle");
             if (chunk.judgeStatus === "judge_checked" && chunk.childFacingSummary) {
@@ -301,19 +311,17 @@ export default function Home() {
                 {
                   role: "agent",
                   text: chunk.childFacingSummary,
-                  character: friend,
+                  character: BRANCH_CHARACTER,
                   isBranch: true,
                   branchLabel: randomBranchLabel(),
                 },
               ]);
-              speechItems.push({ text: chunk.childFacingSummary, char: friend });
-            } else if (chunk.judgeStatus === "judge_rejected") {
-              const rejMsg = "その問い、すごく面白いんだけど、今すぐ正しい答えが確認できなかったんだ。メンターの先生に聞いてみようね！";
-              setMessages((prev) => [...prev, { role: "agent", text: rejMsg, character: teacher }]);
-              speechItems.push({ text: rejMsg, char: teacher });
+              speechItems.push({ text: chunk.childFacingSummary, char: BRANCH_CHARACTER });
             }
+            // judge_rejected: エイリアンは黙っておく（横道があるときだけ出現）
 
           } else if (chunk.type === "error") {
+            errorHandled = true;
             setMessages((prev) => [
               ...prev,
               { role: "agent", text: "ごめん、うまく答えられなかった。もう一度聞いてみて。" },
@@ -323,11 +331,13 @@ export default function Home() {
         }
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", text: "ごめん、うまく答えられなかった。もう一度聞いてみて。" },
-      ]);
-      setLoadingPhase("idle");
+      if (!errorHandled) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "agent", text: "ごめん、うまく答えられなかった。もう一度聞いてみて。" },
+        ]);
+        setLoadingPhase("idle");
+      }
     }
 
     // 会話ログ保存
@@ -439,11 +449,12 @@ export default function Home() {
 
   const micDisabled = loadingPhase !== "idle" || speaking;
 
-  // ── ウェルカム ──────────────────────────────────────────
+  // ── ウェルカム（設定画面）─────────────────────────────────
   if (phase === "welcome") {
+    const canStart = grade !== null && teacherGender !== null && friendType !== null;
     const resumeSubjects = Object.keys(savedConversations);
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center p-6 pt-10">
         <button
           onClick={() => router.push("/profile")}
           className="absolute top-4 right-4 flex flex-col items-center gap-1"
@@ -455,87 +466,179 @@ export default function Home() {
           </div>
           <span className="text-xs text-green-600 font-medium">プロフィール</span>
         </button>
+
         <div className="flex items-center gap-2 mb-1">
           <span className="text-4xl">🌿</span>
-          <h1 className="text-3xl font-bold text-green-800">ブランチラーニング 🌿</h1>
+          <h1 className="text-3xl font-bold text-green-800">ブランチラーニング</h1>
         </div>
-        <p className="text-green-600 mb-6 text-sm">おかえり、{profile.nickname ?? ""}！</p>
+        <p className="text-green-600 mb-8 text-sm">おかえり、{profile.nickname ?? ""}！</p>
 
-        {/* 先生選択 */}
-        {!teacherGender ? (
-          <>
-            <p className="text-gray-700 font-bold mb-4">どっちの先生と話す？</p>
-            <div className="flex gap-4 mb-6">
-              {(["female", "male"] as TeacherGender[]).map((g) => (
-                <button key={g} onClick={() => selectTeacher(g)}
-                  className="flex flex-col items-center gap-2 bg-white rounded-2xl px-6 py-4 shadow-md border-2 border-green-200 hover:border-green-400 active:scale-95 transition-all">
-                  <CharacterAvatar character={g} size={80} />
-                  <span className={`text-sm font-bold ${g === "female" ? "text-pink-600" : "text-blue-600"}`}>
-                    {g === "female" ? "女の先生" : "男の先生"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : !friendType ? (
-          <>
-            <p className="text-gray-700 font-bold mb-4">友達を選んでね！</p>
-            <div className="flex gap-3 mb-6">
-              {FRIEND_OPTIONS.map(({ type, label }) => (
-                <button key={type} onClick={() => selectFriend(type)}
-                  className="flex flex-col items-center gap-2 bg-white rounded-2xl px-4 py-4 shadow-md border-2 border-green-200 hover:border-green-400 active:scale-95 transition-all">
-                  <CharacterAvatar character={type} size={72} />
-                  <span className="text-sm font-bold text-green-700">{label}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center justify-center gap-6 mb-5">
-              <div className="flex flex-col items-center">
-                <CharacterAvatar character={teacherGender} size={80} />
-                <p className={`text-xs font-bold mt-1 ${teacherGender === "female" ? "text-pink-600" : "text-blue-600"}`}>
-                  {teacherGender === "female" ? "女の先生" : "男の先生"}
-                </p>
-                <button onClick={() => { localStorage.removeItem("teacher_gender"); setTeacherGender(null); }}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 underline">変える</button>
+        <div className="w-full max-w-sm space-y-3 mb-6">
+          {/* 学年 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
+            <button
+              onClick={() => setSettingSection(settingSection === "grade" ? null : "grade")}
+              className="w-full flex items-center justify-between px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📚</span>
+                <span className="text-sm font-bold text-gray-600">学年をかえる</span>
               </div>
-              <span className="text-2xl text-gray-300">＆</span>
-              <div className="flex flex-col items-center">
-                <CharacterAvatar character={friendType} size={80} />
-                <p className="text-xs font-bold mt-1 text-green-700">
-                  {FRIEND_OPTIONS.find(f => f.type === friendType)?.label}
-                </p>
-                <button onClick={() => { localStorage.removeItem("friend_type"); setFriendType(null); }}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 underline">変える</button>
+              <div className="flex items-center gap-2">
+                {grade ? (
+                  <span className="text-sm font-bold text-green-700">{GRADE_LABELS[grade - 1]}</span>
+                ) : (
+                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                )}
+                <span className="text-gray-400 text-xs">{settingSection === "grade" ? "▲" : "▼"}</span>
               </div>
-            </div>
-
-            {resumeSubjects.length > 0 && (
-              <div className="w-full max-w-sm mb-4">
-                <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {resumeSubjects.map((s) => {
-                    const info = SUBJECTS.find((sub) => sub.id === s);
-                    return (
-                      <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
-                        {info?.emoji} {s}
-                      </span>
-                    );
-                  })}
+            </button>
+            {settingSection === "grade" && (
+              <div className="border-t border-green-50 p-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {GRADE_LABELS.map((label, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { handleGradeSelect(i + 1); setSettingSection(null); }}
+                      className={`py-2 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 ${
+                        grade === i + 1
+                          ? "bg-green-500 text-white border-green-500"
+                          : "bg-white text-green-800 border-green-200 hover:border-green-400"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
+          </div>
 
+          {/* 先生 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
             <button
-              onClick={() => setPhase("grade")}
-              className="bg-green-500 text-white font-bold py-4 px-10 rounded-2xl hover:bg-green-600 transition-all shadow-md active:scale-95 text-lg"
+              onClick={() => setSettingSection(settingSection === "teacher" ? null : "teacher")}
+              className="w-full flex items-center justify-between px-4 py-3"
             >
-              はじめる →
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👩‍🏫</span>
+                <span className="text-sm font-bold text-gray-600">先生をかえる</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {teacherGender ? (
+                  <>
+                    <CharacterAvatar character={teacherGender} size={28} />
+                    <span className="text-sm font-bold text-green-700">
+                      {teacherGender === "female" ? "あゆみ先生" : "ゆうすけ先生"}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                )}
+                <span className="text-gray-400 text-xs">{settingSection === "teacher" ? "▲" : "▼"}</span>
+              </div>
             </button>
-          </>
+            {settingSection === "teacher" && (
+              <div className="border-t border-green-50 p-3">
+                <div className="flex gap-3 justify-center">
+                  {(["female", "male"] as TeacherGender[]).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => { selectTeacher(g); setSettingSection(null); }}
+                      className={`flex flex-col items-center gap-1 px-6 py-3 rounded-2xl border-2 transition-all active:scale-95 ${
+                        teacherGender === g ? "border-green-500 bg-green-50" : "border-green-100 bg-white hover:border-green-300"
+                      }`}
+                    >
+                      <CharacterAvatar character={g} size={64} />
+                      <span className={`text-xs font-bold ${g === "female" ? "text-pink-600" : "text-blue-600"}`}>
+                        {g === "female" ? "あゆみ先生" : "ゆうすけ先生"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 友達 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
+            <button
+              onClick={() => setSettingSection(settingSection === "friend" ? null : "friend")}
+              className="w-full flex items-center justify-between px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👫</span>
+                <span className="text-sm font-bold text-gray-600">友達をえらぶ</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {friendType ? (
+                  <>
+                    <CharacterAvatar character={friendType} size={28} />
+                    <span className="text-sm font-bold text-green-700">
+                      {FRIEND_OPTIONS.find((f) => f.type === friendType)?.label}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                )}
+                <span className="text-gray-400 text-xs">{settingSection === "friend" ? "▲" : "▼"}</span>
+              </div>
+            </button>
+            {settingSection === "friend" && (
+              <div className="border-t border-green-50 p-3">
+                <div className="flex gap-3 justify-center mb-3">
+                  {FRIEND_OPTIONS.map(({ type, label }) => (
+                    <button
+                      key={type}
+                      onClick={() => { selectFriend(type); setSettingSection(null); }}
+                      className={`flex flex-col items-center gap-1 px-5 py-3 rounded-2xl border-2 transition-all active:scale-95 ${
+                        friendType === type ? "border-green-500 bg-green-50" : "border-green-100 bg-white hover:border-green-300"
+                      }`}
+                    >
+                      <CharacterAvatar character={type} size={56} />
+                      <span className="text-xs font-bold text-green-700">{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2">
+                  <CharacterAvatar character="friend_3" size={36} />
+                  <div>
+                    <p className="text-xs font-bold text-purple-700">エイリアン</p>
+                    <p className="text-[10px] text-purple-500">横道発見の説明担当（固定）</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {resumeSubjects.length > 0 && (
+          <div className="w-full max-w-sm mb-4">
+            <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {resumeSubjects.map((s) => {
+                const info = SUBJECTS.find((sub) => sub.id === s);
+                return (
+                  <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
+                    {info?.emoji} {s}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
         )}
+
+        <button
+          onClick={() => canStart && setPhase("subject")}
+          disabled={!canStart}
+          className={`w-full max-w-sm font-bold py-4 rounded-2xl transition-all shadow-md text-lg active:scale-95 ${
+            canStart
+              ? "bg-green-500 text-white hover:bg-green-600"
+              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          {canStart ? "はじめる →" : "学年・先生・友達をえらんでね"}
+        </button>
 
         <button
           onClick={() => { localStorage.removeItem("student_id"); router.push("/login"); }}
@@ -553,8 +656,8 @@ export default function Home() {
     );
   }
 
-  // ── 学年選択 ────────────────────────────────────────────
-  if (phase === "grade") {
+  // ── 教科選択 ────────────────────────────────────────────
+  if (phase === "subject") {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-4 sm:p-8">
         <button
@@ -574,55 +677,14 @@ export default function Home() {
           </div>
           <span className="text-xs text-green-600 font-medium">プロフィール</span>
         </button>
-        <div className="flex items-center gap-2 sm:gap-3 mb-1">
-          <span className="text-4xl sm:text-5xl">🌿</span>
-          <h1 className="text-3xl sm:text-4xl font-bold text-green-800">ブランチラーニング 🌿</h1>
-        </div>
-        <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">知識のネットワークを広げよう</p>
-
-        <p className="text-gray-700 text-lg sm:text-xl mb-4 sm:mb-6 font-medium">何年生ですか？</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 w-full max-w-xs sm:max-w-none">
-          {GRADE_LABELS.map((label, i) => (
-            <button
-              key={i}
-              onClick={() => handleGradeSelect(i + 1)}
-              className="bg-white border-2 border-green-400 text-green-800 font-bold text-base sm:text-lg px-4 sm:px-8 py-4 sm:py-6 rounded-2xl hover:bg-green-500 hover:text-white hover:border-green-500 transition-all shadow-md active:scale-95"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── 教科選択 ────────────────────────────────────────────
-  if (phase === "subject") {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-4 sm:p-8">
-        <button
-          onClick={() => setPhase("grade")}
-          className="absolute top-5 left-5 text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-medium"
-        >
-          ← 学年えらびにもどる
-        </button>
-        <button
-          onClick={() => router.push("/profile")}
-          className="absolute top-4 right-4 flex flex-col items-center gap-1"
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-green-200 flex items-center justify-center border-2 border-green-400">
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-              : <span className="text-xl">👤</span>}
-          </div>
-          <span className="text-xs text-green-600 font-medium">プロフィール</span>
-        </button>
 
         <div className="flex items-center gap-2 mb-1">
           <span className="text-3xl">🌿</span>
           <h1 className="text-2xl sm:text-3xl font-bold text-green-800">ブランチラーニング 🌿</h1>
         </div>
-        <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">今日は何を学ぶ？</p>
+        <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">
+          {grade ? `${GRADE_LABELS[grade - 1]}・今日は何を学ぶ？` : "今日は何を学ぶ？"}
+        </p>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm">
           {SUBJECTS.map((s) => {
