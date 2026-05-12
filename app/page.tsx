@@ -13,7 +13,7 @@ type TeacherGender = "female" | "male";
 type FriendType = "friend_1" | "friend_2" | "friend_3";
 
 const FRIEND_OPTIONS: { type: FriendType; label: string }[] = [
-  { type: "friend_1", label: "ともこ" },
+  { type: "friend_1", label: "のぞみ" },
   { type: "friend_2", label: "けんた" },
   { type: "friend_3", label: "エイリアン" },
 ];
@@ -29,6 +29,7 @@ type SavedConversation = {
 type Message = {
   role: "child" | "agent";
   text: string;
+  character?: CharacterKey;
   isBranch?: boolean;
   branchLabel?: string;
 };
@@ -210,8 +211,8 @@ export default function Home() {
       const data = await res.json();
       introTheme = data.theme ?? selectedSubject;
       introMessages = [
-        { role: "agent", text: data.senseiLine },
-        { role: "agent", text: data.tomoLine },
+        { role: "agent", text: data.senseiLine, character: teacher },
+        { role: "agent", text: data.tomoLine, character: friend },
       ];
     } catch {
       const subjectEmoji = SUBJECTS.find((s) => s.id === selectedSubject)?.emoji ?? "";
@@ -283,12 +284,12 @@ export default function Home() {
           const chunk = JSON.parse(line);
 
           if (chunk.type === "done") {
-            setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
+            setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: teacher }]);
             setLoadingPhase("idle");
             speechItems.push({ text: chunk.text, char: teacher });
 
           } else if (chunk.type === "immediate") {
-            setMessages((prev) => [...prev, { role: "agent", text: chunk.text }]);
+            setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: teacher }]);
             setLoadingPhase("checking");
             speechItems.push({ text: chunk.text, char: teacher });
 
@@ -300,6 +301,7 @@ export default function Home() {
                 {
                   role: "agent",
                   text: chunk.childFacingSummary,
+                  character: friend,
                   isBranch: true,
                   branchLabel: randomBranchLabel(),
                 },
@@ -307,7 +309,7 @@ export default function Home() {
               speechItems.push({ text: chunk.childFacingSummary, char: friend });
             } else if (chunk.judgeStatus === "judge_rejected") {
               const rejMsg = "その問い、すごく面白いんだけど、今すぐ正しい答えが確認できなかったんだ。メンターの先生に聞いてみようね！";
-              setMessages((prev) => [...prev, { role: "agent", text: rejMsg }]);
+              setMessages((prev) => [...prev, { role: "agent", text: rejMsg, character: teacher }]);
               speechItems.push({ text: rejMsg, char: teacher });
             }
 
@@ -760,15 +762,13 @@ export default function Home() {
             );
           }
 
-          const teacher = teacherGender ?? "female";
-          const friend: CharacterKey = friendType ?? "friend_1";
-          const bubbleChar = msg.isBranch ? friend : teacher;
+          const avatarChar: CharacterKey = msg.character ?? (teacherGender ?? "female");
           return (
             <div key={i}>
               {msg.isBranch ? (
                 <div className="flex items-end gap-2">
                   <div className="flex-shrink-0">
-                    <CharacterAvatar character={friend} size={52} />
+                    <CharacterAvatar character={avatarChar} size={52} />
                   </div>
                   <div className="bg-gradient-to-r from-green-50 to-yellow-50 border-2 border-green-300 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[72%] sm:max-w-sm shadow-sm">
                     <div className="flex items-center gap-1 mb-1">
@@ -781,7 +781,7 @@ export default function Home() {
               ) : (
                 <div className="flex items-end gap-2">
                   <div className="flex-shrink-0">
-                    <CharacterAvatar character={teacher} size={52} />
+                    <CharacterAvatar character={avatarChar} size={52} />
                   </div>
                   <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-bl-sm max-w-[72%] sm:max-w-sm text-sm shadow">
                     {msg.text}

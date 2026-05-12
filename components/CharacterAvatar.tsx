@@ -8,7 +8,7 @@ export type CharacterKey = 'female' | 'male' | 'friend_1' | 'friend_2' | 'friend
 const CHARACTER_INFO: Record<CharacterKey, { prefix: string; label: string }> = {
   female:   { prefix: 'sensei_f', label: '女の先生' },
   male:     { prefix: 'sensei_m', label: '男の先生' },
-  friend_1: { prefix: 'friend_1', label: 'ともこ' },
+  friend_1: { prefix: 'friend_1', label: 'のぞみ' },
   friend_2: { prefix: 'friend_2', label: 'けんた' },
   friend_3: { prefix: 'friend_3', label: 'エイリアン' },
 }
