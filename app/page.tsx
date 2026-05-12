@@ -102,6 +102,7 @@ export default function Home() {
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
   const [settingSection, setSettingSection] = useState<SettingSection>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [theme, setTheme] = useState<string | null>(null);
 
@@ -113,6 +114,7 @@ export default function Home() {
   const [speaking, setSpeaking] = useState(false);
   const [talkingChar, setTalkingChar] = useState<CharacterKey | null>(null);
   const [interimText, setInterimText] = useState("");
+  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -158,6 +160,26 @@ export default function Home() {
   }, [router]);
 
   function unlockSpeech() { unlockAudio(); }
+
+  useEffect(() => {
+    if (phase !== "chat") return;
+    if (!navigator.permissions) return;
+    navigator.permissions.query({ name: "microphone" as PermissionName }).then((result) => {
+      if (result.state === "granted") setMicPermission("granted");
+      else if (result.state === "denied") setMicPermission("denied");
+      // "prompt" → "unknown" のまま（バナーを表示）
+    }).catch(() => {/* 非対応ブラウザは無視 */});
+  }, [phase]);
+
+  async function requestMicPermission() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicPermission("granted");
+    } catch {
+      setMicPermission("denied");
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -454,43 +476,86 @@ export default function Home() {
     const canStart = grade !== null && teacherGender !== null && friendType !== null;
     const resumeSubjects = Object.keys(savedConversations);
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center p-6 pt-10">
-        <button
-          onClick={() => router.push("/profile")}
-          className="absolute top-4 right-4 flex flex-col items-center gap-1"
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-green-200 flex items-center justify-center border-2 border-green-400">
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-              : <span className="text-xl">👤</span>}
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col">
+        {/* 緑ヘッダー */}
+        <header className="bg-green-600 text-white px-4 py-3 flex items-center justify-between shadow relative">
+          <button onClick={() => router.push("/profile")} className="flex-shrink-0">
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-green-400 flex items-center justify-center border-2 border-white">
+              {profile.avatar_url
+                ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                : <span className="text-base">👤</span>}
+            </div>
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="w-10 h-10 flex flex-col items-center justify-center gap-1.5 rounded-full hover:bg-green-500 transition-colors"
+            >
+              <span className="w-5 h-0.5 bg-white rounded-full block" />
+              <span className="w-5 h-0.5 bg-white rounded-full block" />
+              <span className="w-5 h-0.5 bg-white rounded-full block" />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-12 z-20 bg-white rounded-2xl shadow-lg border border-green-100 overflow-hidden min-w-[160px]">
+                  <a
+                    href="/knowledge"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-50 transition-colors"
+                  >
+                    <span className="text-lg">🌿</span>
+                    <span className="text-sm font-bold text-green-700">発見マップ</span>
+                  </a>
+                  <a
+                    href="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-50 transition-colors"
+                  >
+                    <span className="text-lg">⚙️</span>
+                    <span className="text-sm font-bold text-gray-600">管理者</span>
+                  </a>
+                  <div className="border-t border-gray-100" />
+                  <button
+                    onClick={() => { setMenuOpen(false); localStorage.removeItem("student_id"); router.push("/login"); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors"
+                  >
+                    <span className="text-lg">🚪</span>
+                    <span className="text-sm font-bold text-red-400">ログアウト</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-          <span className="text-xs text-green-600 font-medium">プロフィール</span>
-        </button>
+        </header>
 
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-4xl">🌿</span>
-          <h1 className="text-3xl font-bold text-green-800">ブランチラーニング</h1>
+        {/* コンテンツ */}
+        <div className="flex flex-col items-center p-4 pt-6">
+        {/* タイトル */}
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-3xl">🌿</span>
+          <h1 className="text-2xl font-bold text-green-800">ブランチラーニング</h1>
+          <span className="text-3xl">🌿</span>
         </div>
-        <p className="text-green-600 mb-8 text-sm">おかえり、{profile.nickname ?? ""}！</p>
+        <p className="text-green-600 mb-6 text-base font-medium">おかえり、{profile.nickname ?? ""}！</p>
 
         <div className="w-full max-w-sm space-y-3 mb-6">
           {/* 学年 */}
           <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
             <button
               onClick={() => setSettingSection(settingSection === "grade" ? null : "grade")}
-              className="w-full flex items-center justify-between px-4 py-3"
+              className="w-full flex items-center justify-between px-4 py-4"
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">📚</span>
-                <span className="text-sm font-bold text-gray-600">学年をかえる</span>
+                <span className="text-base font-bold text-gray-600">学年をかえる</span>
               </div>
               <div className="flex items-center gap-2">
                 {grade ? (
-                  <span className="text-sm font-bold text-green-700">{GRADE_LABELS[grade - 1]}</span>
+                  <span className="text-base font-bold text-green-700">{GRADE_LABELS[grade - 1]}</span>
                 ) : (
-                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                  <span className="text-base text-red-400 font-medium">えらんでね</span>
                 )}
-                <span className="text-gray-400 text-xs">{settingSection === "grade" ? "▲" : "▼"}</span>
+                <span className="text-gray-400 text-sm">{settingSection === "grade" ? "▲" : "▼"}</span>
               </div>
             </button>
             {settingSection === "grade" && (
@@ -518,24 +583,23 @@ export default function Home() {
           <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
             <button
               onClick={() => setSettingSection(settingSection === "teacher" ? null : "teacher")}
-              className="w-full flex items-center justify-between px-4 py-3"
+              className="w-full flex items-center justify-between px-4 py-4"
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">👩‍🏫</span>
-                <span className="text-sm font-bold text-gray-600">先生をかえる</span>
+                <span className="text-base font-bold text-gray-600">先生をかえる</span>
               </div>
               <div className="flex items-center gap-2">
                 {teacherGender ? (
                   <>
-                    <CharacterAvatar character={teacherGender} size={28} />
-                    <span className="text-sm font-bold text-green-700">
+                    <CharacterAvatar character={teacherGender} size={32} />
+                    <span className="text-base font-bold text-green-700">
                       {teacherGender === "female" ? "あゆみ先生" : "ゆうすけ先生"}
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                  <span className="text-base text-red-400 font-medium">えらんでね</span>
                 )}
-                <span className="text-gray-400 text-xs">{settingSection === "teacher" ? "▲" : "▼"}</span>
+                <span className="text-gray-400 text-sm">{settingSection === "teacher" ? "▲" : "▼"}</span>
               </div>
             </button>
             {settingSection === "teacher" && (
@@ -564,24 +628,23 @@ export default function Home() {
           <div className="bg-white rounded-2xl shadow-sm border border-green-100 overflow-hidden">
             <button
               onClick={() => setSettingSection(settingSection === "friend" ? null : "friend")}
-              className="w-full flex items-center justify-between px-4 py-3"
+              className="w-full flex items-center justify-between px-4 py-4"
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">👫</span>
-                <span className="text-sm font-bold text-gray-600">友達をえらぶ</span>
+                <span className="text-base font-bold text-gray-600">友達をえらぶ</span>
               </div>
               <div className="flex items-center gap-2">
                 {friendType ? (
                   <>
-                    <CharacterAvatar character={friendType} size={28} />
-                    <span className="text-sm font-bold text-green-700">
+                    <CharacterAvatar character={friendType} size={32} />
+                    <span className="text-base font-bold text-green-700">
                       {FRIEND_OPTIONS.find((f) => f.type === friendType)?.label}
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-red-400 font-medium">えらんでね</span>
+                  <span className="text-base text-red-400 font-medium">えらんでね</span>
                 )}
-                <span className="text-gray-400 text-xs">{settingSection === "friend" ? "▲" : "▼"}</span>
+                <span className="text-gray-400 text-sm">{settingSection === "friend" ? "▲" : "▼"}</span>
               </div>
             </button>
             {settingSection === "friend" && (
@@ -618,10 +681,28 @@ export default function Home() {
             <div className="flex flex-wrap gap-2 justify-center">
               {resumeSubjects.map((s) => {
                 const info = SUBJECTS.find((sub) => sub.id === s);
+                const saved = savedConversations[s];
                 return (
-                  <span key={s} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
-                    {info?.emoji} {s}
-                  </span>
+                  <button
+                    key={s}
+                    onClick={() => {
+                      if (!canStart || !saved) return;
+                      unlockSpeech();
+                      setSubject(s);
+                      setMessages(saved.messages);
+                      setConversationId(saved.id);
+                      setTheme(null);
+                      setPhase("chat");
+                    }}
+                    disabled={!canStart}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all active:scale-95 ${
+                      canStart
+                        ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
+                        : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                    }`}
+                  >
+                    {info?.emoji} {s} →
+                  </button>
                 );
               })}
             </div>
@@ -640,18 +721,7 @@ export default function Home() {
           {canStart ? "はじめる →" : "学年・先生・友達をえらんでね"}
         </button>
 
-        <button
-          onClick={() => { localStorage.removeItem("student_id"); router.push("/login"); }}
-          className="fixed bottom-5 left-5 text-xs text-gray-400 hover:text-gray-600"
-        >
-          ログアウト
-        </button>
-        <a
-          href="/admin"
-          className="fixed bottom-5 right-5 text-xs text-green-600 border border-green-400 rounded-lg px-3 py-2 hover:bg-green-50 transition-colors bg-white shadow-sm"
-        >
-          管理者
-        </a>
+        </div>{/* /コンテンツ */}
       </div>
     );
   }
@@ -659,28 +729,29 @@ export default function Home() {
   // ── 教科選択 ────────────────────────────────────────────
   if (phase === "subject") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-4 sm:p-8">
-        <button
-          onClick={() => setPhase("welcome")}
-          className="absolute top-5 left-5 text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-medium"
-        >
-          ← もどる
-        </button>
-        <button
-          onClick={() => router.push("/profile")}
-          className="absolute top-4 right-4 flex flex-col items-center gap-1"
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-green-200 flex items-center justify-center border-2 border-green-400">
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-              : <span className="text-xl">👤</span>}
-          </div>
-          <span className="text-xs text-green-600 font-medium">プロフィール</span>
-        </button>
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col">
+        {/* 緑ヘッダー */}
+        <header className="bg-green-600 text-white px-4 py-3 flex items-center justify-between shadow">
+          <button
+            onClick={() => setPhase("welcome")}
+            className="text-white hover:text-green-100 flex items-center gap-1 text-sm font-medium"
+          >
+            ← もどる
+          </button>
+          <button onClick={() => router.push("/profile")}>
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-green-400 flex items-center justify-center border-2 border-white">
+              {profile.avatar_url
+                ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                : <span className="text-base">👤</span>}
+            </div>
+          </button>
+        </header>
 
+        <div className="flex flex-col items-center justify-center flex-1 p-4 sm:p-8">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-3xl">🌿</span>
-          <h1 className="text-2xl sm:text-3xl font-bold text-green-800">ブランチラーニング 🌿</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-green-800">ブランチラーニング</h1>
+          <span className="text-3xl">🌿</span>
         </div>
         <p className="text-green-600 mb-6 sm:mb-8 text-sm sm:text-base">
           {grade ? `${GRADE_LABELS[grade - 1]}・今日は何を学ぶ？` : "今日は何を学ぶ？"}
@@ -708,6 +779,7 @@ export default function Home() {
             );
           })}
         </div>
+        </div>{/* /flex-1 */}
       </div>
     );
   }
@@ -801,6 +873,26 @@ export default function Home() {
 
       {/* メッセージ */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {micPermission === "unknown" && (
+          <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3 gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎤</span>
+              <p className="text-xs text-green-800 font-medium">声で話しかけてみよう！<br/><span className="font-normal text-green-600">マイクの許可が必要だよ</span></p>
+            </div>
+            <button
+              onClick={requestMicPermission}
+              className="flex-shrink-0 bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-green-600 active:scale-95 transition-all"
+            >
+              許可する
+            </button>
+          </div>
+        )}
+        {micPermission === "denied" && (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+            <span className="text-xl">🔇</span>
+            <p className="text-xs text-red-600">マイクが使えません。設定 → Safari → マイク → 許可 をオンにしてね</p>
+          </div>
+        )}
         {theme && (
           <div className="flex justify-center pt-1 pb-2">
             <span className="bg-white/80 text-green-700 text-xs font-bold px-4 py-1.5 rounded-full shadow-sm border border-green-200">
