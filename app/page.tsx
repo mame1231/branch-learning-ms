@@ -49,48 +49,34 @@ function randomBranchLabel() {
   return BRANCH_LABELS[Math.floor(Math.random() * BRANCH_LABELS.length)];
 }
 
-let audioCtx: AudioContext | null = null;
-let currentSource: AudioBufferSourceNode | null = null;
+// iOSはHTMLAudioElementのほうがWeb Audio APIより安定する
+let currentAudio: HTMLAudioElement | null = null;
 
-function getAudioContext(): AudioContext {
-  if (!audioCtx) audioCtx = new AudioContext();
-  return audioCtx;
-}
+// ジェスチャー中に無音を再生してiOSのオーディオセッションを解除
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
 function unlockAudio() {
-  const ctx = getAudioContext();
-  // iOSはgesture中に実際に音を鳴らさないとAudioContextが解除されない
-  if (ctx.state === "suspended") ctx.resume();
-  try {
-    const buf = ctx.createBuffer(1, 1, 22050);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
-  } catch { /* ignore */ }
+  const audio = new Audio(SILENT_WAV);
+  audio.play().catch(() => {});
 }
 
 function speakText(text: string, character: string): Promise<void> {
   return new Promise(async (resolve) => {
-    if (currentSource) { currentSource.stop(); currentSource = null; }
+    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
     try {
-      const ctx = getAudioContext();
-      if (ctx.state === "suspended") await ctx.resume();
-
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, character }),
       });
       if (!res.ok) throw new Error("TTS failed");
-      const arrayBuffer = await res.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = () => resolve();
-      currentSource = source;
-      source.start(0);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudio = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
+      await audio.play();
     } catch {
       resolve();
     }
@@ -457,7 +443,7 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      if (currentSource) { currentSource.stop(); currentSource = null; }
+      if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
       recognition.start();
       setRecording(true);
     } catch {
@@ -472,7 +458,7 @@ export default function Home() {
   }
 
   function stopSpeaking() {
-    if (currentSource) { currentSource.stop(); currentSource = null; }
+    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
     setSpeaking(false);
     setTalkingChar(null);
   }
