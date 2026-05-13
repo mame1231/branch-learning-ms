@@ -18,7 +18,11 @@ export async function POST(request: NextRequest) {
   const { text, character } = await request.json();
 
   if (!text || !character) {
-    return Response.json({ error: "text and character are required" }, { status: 400 });
+    return Response.json({
+      error: "text and character are required",
+      receivedText: String(text ?? "").slice(0, 40),
+      receivedChar: String(character ?? ""),
+    }, { status: 400 });
   }
 
   const key = process.env.AZURE_SPEECH_KEY;

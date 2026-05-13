@@ -96,6 +96,7 @@ function stopAudio() {
 
 function speakText(text: string, character: string, onError?: (msg: string) => void): Promise<void> {
   return new Promise(async (resolve) => {
+    if (!text?.trim() || !character) { resolve(); return; } // 空テキストはスキップ
     stopAudio();
     const audio = getPlayEl();
 
@@ -107,7 +108,7 @@ function speakText(text: string, character: string, onError?: (msg: string) => v
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        onError?.(`TTS ${res.status}: ${errBody.error ?? ""} / ${errBody.azureStatus ?? ""} ${errBody.azureBody ?? ""} region=${errBody.region ?? ""} voice=${errBody.voice ?? ""}`);
+        onError?.(`TTS ${res.status}: ${errBody.error ?? ""} text="${errBody.receivedText ?? ""}" char="${errBody.receivedChar ?? ""}" azure=${errBody.azureStatus ?? ""} region=${errBody.region ?? ""} voice=${errBody.voice ?? ""}`);
         resolve(); return;
       }
       const blob = await res.blob();
