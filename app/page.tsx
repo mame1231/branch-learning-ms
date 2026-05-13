@@ -323,8 +323,37 @@ export default function Home() {
 
     const teacher = teacherGender ?? "female";
     const friend: CharacterKey = friendType ?? "friend_1";
-    const speechItems: Array<{ text: string; char: CharacterKey }> = [];
     let errorHandled = false;
+
+    // リアルタイム音声キュー
+    type SpeechItem = { text: string; char: CharacterKey };
+    const queue: SpeechItem[] = [];
+    let streamingDone = false;
+    const signal = { wake: null as (() => void) | null };
+
+    function enqueue(item: SpeechItem) {
+      queue.push(item);
+      signal.wake?.();
+      signal.wake = null;
+    }
+
+    async function drainSpeech() {
+      let started = false;
+      while (!streamingDone || queue.length > 0) {
+        if (queue.length > 0) {
+          if (!started) { setSpeaking(true); started = true; }
+          const item = queue.shift()!;
+          setTalkingChar(item.char);
+          await speakText(item.text, item.char, setTtsDebug);
+          setTalkingChar(null);
+        } else {
+          await new Promise<void>((r) => { signal.wake = r; });
+        }
+      }
+      if (started) { setSpeaking(false); setTalkingChar(null); }
+    }
+
+    const drainPromise = drainSpeech();
 
     try {
       const res = await fetch("/api/branch", {
@@ -352,16 +381,16 @@ export default function Home() {
           if (chunk.type === "done") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: teacher }]);
             setLoadingPhase("idle");
-            speechItems.push({ text: chunk.text, char: teacher });
+            enqueue({ text: chunk.text, char: teacher });
 
           } else if (chunk.type === "immediate") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: teacher }]);
             setLoadingPhase("checking");
-            speechItems.push({ text: chunk.text, char: teacher });
+            enqueue({ text: chunk.text, char: teacher });
 
           } else if (chunk.type === "tomo_immediate") {
             setMessages((prev) => [...prev, { role: "agent", text: chunk.text, character: friend }]);
-            speechItems.push({ text: chunk.text, char: friend });
+            enqueue({ text: chunk.text, char: friend });
 
           } else if (chunk.type === "branch") {
             setLoadingPhase("idle");
@@ -376,7 +405,7 @@ export default function Home() {
                   branchLabel: randomBranchLabel(),
                 },
               ]);
-              speechItems.push({ text: chunk.childFacingSummary, char: BRANCH_CHARACTER });
+              enqueue({ text: chunk.childFacingSummary, char: BRANCH_CHARACTER });
             }
             // judge_rejected: エイリアンは黙っておく（横道があるときだけ出現）
 
@@ -403,19 +432,10 @@ export default function Home() {
     // 会話ログ保存
     setMessages((prev) => { saveMessages(prev); return prev; });
 
-    if (speechItems.length > 0) {
-      setSpeaking(true);
-      try {
-        for (const item of speechItems) {
-          setTalkingChar(item.char);
-          await speakText(item.text, item.char, setTtsDebug);
-          setTalkingChar(null);
-        }
-      } finally {
-        setSpeaking(false);
-        setTalkingChar(null);
-      }
-    }
+    // ストリーミング完了を通知してドレイン待機
+    streamingDone = true;
+    signal.wake?.();
+    await drainPromise;
   }
 
   function handleKey(e: React.KeyboardEvent) {
