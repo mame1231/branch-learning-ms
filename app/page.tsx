@@ -49,28 +49,55 @@ function randomBranchLabel() {
   return BRANCH_LABELS[Math.floor(Math.random() * BRANCH_LABELS.length)];
 }
 
-let sharedAudio: HTMLAudioElement | null = null;
+// 解除用（サイレント再生）と再生用を分ける → unlockAudio が TTS を再再生しないように
+let unlockEl: HTMLAudioElement | null = null;
+let playEl: HTMLAudioElement | null = null;
 let currentBlobUrl: string | null = null;
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
-function getSharedAudio(): HTMLAudioElement {
-  if (!sharedAudio) {
-    sharedAudio = document.createElement("audio");
-    sharedAudio.style.display = "none";
-    document.body?.appendChild(sharedAudio);
+function getUnlockEl(): HTMLAudioElement {
+  if (!unlockEl) {
+    unlockEl = document.createElement("audio");
+    unlockEl.style.display = "none";
+    document.body?.appendChild(unlockEl);
   }
-  return sharedAudio;
+  return unlockEl;
+}
+
+function getPlayEl(): HTMLAudioElement {
+  if (!playEl) {
+    playEl = document.createElement("audio");
+    playEl.style.display = "none";
+    document.body?.appendChild(playEl);
+  }
+  return playEl;
 }
 
 function unlockAudio() {
-  const audio = getSharedAudio();
-  audio.play().catch(() => {});
+  // 解除専用要素で無音を再生 → TTS再生用要素には触らない
+  const el = getUnlockEl();
+  el.src = SILENT_WAV;
+  el.play().catch(() => {});
+  // 再生用要素も同時にiOS向け初期化（srcなしでplay→失敗するが解除される）
+  const pel = getPlayEl();
+  if (!pel.src || pel.src === window.location.href) {
+    pel.src = SILENT_WAV;
+    pel.play().catch(() => {});
+  }
+}
+
+function stopAudio() {
+  const el = getPlayEl();
+  el.pause();
+  el.onended = null;
+  el.onerror = null;
+  if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
 }
 
 function speakText(text: string, character: string, onError?: (msg: string) => void): Promise<void> {
   return new Promise(async (resolve) => {
-    const audio = getSharedAudio();
-    audio.pause();
-    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    stopAudio();
+    const audio = getPlayEl();
 
     try {
       const res = await fetch("/api/tts", {
@@ -87,7 +114,7 @@ function speakText(text: string, character: string, onError?: (msg: string) => v
       const url = URL.createObjectURL(blob);
       currentBlobUrl = url;
       audio.onended = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
-      audio.onerror = (e) => { onError?.(`audio onerror: ${JSON.stringify(e)}`); URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
       audio.src = url;
       audio.load();
       await audio.play().catch((e) => { onError?.(`play() rejected: ${e}`); resolve(); });
@@ -459,7 +486,8 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      unlockAudio(); // マイクタップ時にオーディオ要素を有効化しておく
+      stopAudio();   // 再生中のTTSを停止
+      unlockAudio(); // マイクタップ時にオーディオ要素を有効化
       recognition.start();
       setRecording(true);
     } catch {
@@ -474,8 +502,7 @@ export default function Home() {
   }
 
   function stopSpeaking() {
-    if (sharedAudio) { sharedAudio.pause(); }
-    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    stopAudio();
     setSpeaking(false);
     setTalkingChar(null);
   }
