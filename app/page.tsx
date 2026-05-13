@@ -49,34 +49,38 @@ function randomBranchLabel() {
   return BRANCH_LABELS[Math.floor(Math.random() * BRANCH_LABELS.length)];
 }
 
-// iOSはHTMLAudioElementのほうがWeb Audio APIより安定する
-let currentAudio: HTMLAudioElement | null = null;
-
-// ジェスチャー中に無音を再生してiOSのオーディオセッションを解除
+// iOSはジェスチャー中に一度play()したAudio要素のみ後から非同期でも再生できる
+// → 同じ要素を使い回すことで制限を回避する
 const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+let sharedAudio: HTMLAudioElement | null = null;
+let currentBlobUrl: string | null = null;
 
 function unlockAudio() {
-  const audio = new Audio(SILENT_WAV);
-  audio.play().catch(() => {});
+  if (!sharedAudio) sharedAudio = new Audio();
+  sharedAudio.src = SILENT_WAV;
+  sharedAudio.play().catch(() => {});
 }
 
 function speakText(text: string, character: string): Promise<void> {
   return new Promise(async (resolve) => {
-    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+    if (!sharedAudio) sharedAudio = new Audio();
+    sharedAudio.pause();
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, character }),
       });
-      if (!res.ok) throw new Error("TTS failed");
+      if (!res.ok) { resolve(); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      currentAudio = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
-      await audio.play();
+      currentBlobUrl = url;
+      sharedAudio.onended = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
+      sharedAudio.onerror = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
+      sharedAudio.src = url;
+      await sharedAudio.play();
     } catch {
       resolve();
     }
@@ -443,7 +447,7 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+      if (sharedAudio) { sharedAudio.pause(); }
       recognition.start();
       setRecording(true);
     } catch {
@@ -458,7 +462,8 @@ export default function Home() {
   }
 
   function stopSpeaking() {
-    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+    if (sharedAudio) { sharedAudio.pause(); }
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
     setSpeaking(false);
     setTalkingChar(null);
   }
