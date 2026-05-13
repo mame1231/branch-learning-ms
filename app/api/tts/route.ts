@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const region = process.env.AZURE_SPEECH_REGION ?? "eastus";
 
   if (!key) {
-    return Response.json({ error: "AZURE_SPEECH_KEY not set" }, { status: 500 });
+    return Response.json({ error: "AZURE_SPEECH_KEY not set", region }, { status: 500 });
   }
 
   const profile = VOICE_PROFILES[character as keyof typeof VOICE_PROFILES] ?? VOICE_PROFILES.sensei;
@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
   );
 
   if (!res.ok) {
-    return Response.json({ error: "TTS failed" }, { status: 500 });
+    const body = await res.text().catch(() => "");
+    return Response.json({ error: "TTS failed", azureStatus: res.status, azureBody: body, region, voice: profile.voice }, { status: 500 });
   }
 
   const audioBuffer = await res.arrayBuffer();

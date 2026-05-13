@@ -78,7 +78,11 @@ function speakText(text: string, character: string, onError?: (msg: string) => v
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, character }),
       });
-      if (!res.ok) { onError?.(`TTS HTTP ${res.status}`); resolve(); return; }
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        onError?.(`TTS ${res.status}: ${errBody.error ?? ""} / ${errBody.azureStatus ?? ""} ${errBody.azureBody ?? ""} region=${errBody.region ?? ""} voice=${errBody.voice ?? ""}`);
+        resolve(); return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       currentBlobUrl = url;
