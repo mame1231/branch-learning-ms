@@ -49,22 +49,27 @@ function randomBranchLabel() {
   return BRANCH_LABELS[Math.floor(Math.random() * BRANCH_LABELS.length)];
 }
 
-// iOSはジェスチャー中に一度play()したAudio要素のみ後から非同期でも再生できる
-// → 同じ要素を使い回すことで制限を回避する
-const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 let sharedAudio: HTMLAudioElement | null = null;
 let currentBlobUrl: string | null = null;
 
-function unlockAudio() {
-  if (!sharedAudio) sharedAudio = new Audio();
-  sharedAudio.src = SILENT_WAV;
-  sharedAudio.play().catch(() => {});
+function getSharedAudio(): HTMLAudioElement {
+  if (!sharedAudio) {
+    sharedAudio = document.createElement("audio");
+    sharedAudio.style.display = "none";
+    document.body?.appendChild(sharedAudio);
+  }
+  return sharedAudio;
 }
 
-function speakText(text: string, character: string): Promise<void> {
+function unlockAudio() {
+  const audio = getSharedAudio();
+  audio.play().catch(() => {});
+}
+
+function speakText(text: string, character: string, onError?: (msg: string) => void): Promise<void> {
   return new Promise(async (resolve) => {
-    if (!sharedAudio) sharedAudio = new Audio();
-    sharedAudio.pause();
+    const audio = getSharedAudio();
+    audio.pause();
     if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
 
     try {
@@ -73,15 +78,17 @@ function speakText(text: string, character: string): Promise<void> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, character }),
       });
-      if (!res.ok) { resolve(); return; }
+      if (!res.ok) { onError?.(`TTS HTTP ${res.status}`); resolve(); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       currentBlobUrl = url;
-      sharedAudio.onended = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
-      sharedAudio.onerror = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
-      sharedAudio.src = url;
-      await sharedAudio.play();
-    } catch {
+      audio.onended = () => { URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
+      audio.onerror = (e) => { onError?.(`audio onerror: ${JSON.stringify(e)}`); URL.revokeObjectURL(url); currentBlobUrl = null; resolve(); };
+      audio.src = url;
+      audio.load();
+      await audio.play().catch((e) => { onError?.(`play() rejected: ${e}`); resolve(); });
+    } catch (e) {
+      onError?.(`catch: ${e}`);
       resolve();
     }
   });
@@ -113,6 +120,7 @@ export default function Home() {
   const [talkingChar, setTalkingChar] = useState<CharacterKey | null>(null);
   const [interimText, setInterimText] = useState("");
   const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
+  const [ttsDebug, setTtsDebug] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -260,11 +268,11 @@ export default function Home() {
     setSpeaking(true);
     try {
       setTalkingChar(teacher);
-      await speakText(introMessages[0].text, teacher);
+      await speakText(introMessages[0].text, teacher, setTtsDebug);
       setTalkingChar(null);
       if (introMessages[1]) {
         setTalkingChar(friend);
-        await speakText(introMessages[1].text, friend);
+        await speakText(introMessages[1].text, friend, setTtsDebug);
         setTalkingChar(null);
       }
     } finally {
@@ -368,7 +376,7 @@ export default function Home() {
       try {
         for (const item of speechItems) {
           setTalkingChar(item.char);
-          await speakText(item.text, item.char);
+          await speakText(item.text, item.char, setTtsDebug);
           setTalkingChar(null);
         }
       } finally {
@@ -447,7 +455,7 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      if (sharedAudio) { sharedAudio.pause(); }
+      unlockAudio(); // マイクタップ時にオーディオ要素を有効化しておく
       recognition.start();
       setRecording(true);
     } catch {
@@ -968,6 +976,11 @@ export default function Home() {
             <div className="bg-blue-200 text-blue-800 px-4 py-3 rounded-2xl rounded-tr-sm max-w-sm text-sm shadow opacity-70 italic">
               {interimText}
             </div>
+          </div>
+        )}
+        {ttsDebug && (
+          <div className="text-[10px] text-red-400 px-2 py-1 bg-red-50 rounded break-all">
+            🔇 {ttsDebug}
           </div>
         )}
         <div ref={bottomRef} />
