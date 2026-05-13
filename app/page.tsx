@@ -59,7 +59,15 @@ function getAudioContext(): AudioContext {
 
 function unlockAudio() {
   const ctx = getAudioContext();
+  // iOSはgesture中に実際に音を鳴らさないとAudioContextが解除されない
   if (ctx.state === "suspended") ctx.resume();
+  try {
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch { /* ignore */ }
 }
 
 function speakText(text: string, character: string): Promise<void> {

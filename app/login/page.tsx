@@ -16,17 +16,29 @@ export default function LoginPage() {
     setError('')
 
     const supabase = createClient()
-    const { data, error } = await supabase
-      .from('students')
-      .select('id')
-      .eq('code', code.trim().toUpperCase())
-      .single()
+    const normalized = code.trim().toUpperCase().replace(/-/g, '')
 
-    if (error || !data) {
+    const { data: allStudents, error } = await supabase
+      .from('students')
+      .select('id, code')
+
+    if (error) {
+      setError('エラーが起きました。もう一度試してね。')
+      setLoading(false)
+      return
+    }
+
+    const matched = allStudents?.find(
+      (s) => s.code.replace(/-/g, '') === normalized
+    )
+
+    if (!matched) {
       setError('IDが見つかりません。先生に確認してね。')
       setLoading(false)
       return
     }
+
+    const data = matched
 
     localStorage.setItem('student_id', data.id)
 
@@ -56,7 +68,7 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             type="text"
-            placeholder="例: TARO-001"
+            placeholder="例: TARO001"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             required
