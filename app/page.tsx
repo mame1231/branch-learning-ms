@@ -34,6 +34,7 @@ type Message = {
   character?: CharacterKey;
   isBranch?: boolean;
   branchLabel?: string;
+  imageUrl?: string;
 };
 
 const BRANCH_LABELS = [
@@ -158,6 +159,7 @@ export default function Home() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const speechUnlockedRef = useRef(false);
   const interimTextRef = useRef("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // セッション確認・プロフィール・前回会話取得
   useEffect(() => {
@@ -436,6 +438,44 @@ export default function Home() {
     streamingDone = true;
     signal.wake?.();
     await drainPromise;
+  }
+
+  async function sendPhoto(file: File) {
+    if (loadingPhase !== "idle" || speaking || grade === null || subject === null) return;
+
+    const dataUrl = URL.createObjectURL(file);
+    const base64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string).split(",")[1]);
+      reader.readAsDataURL(file);
+    });
+
+    setMessages((prev) => [...prev, { role: "child", text: "📷 写真を送ったよ", imageUrl: dataUrl }]);
+    setLoadingPhase("thinking");
+
+    const teacher = teacherGender ?? "female";
+
+    try {
+      const res = await fetch("/api/vision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, grade, subject }),
+      });
+      const data = await res.json();
+      const hint: string = data.hint ?? "ごめん、うまく読み取れなかった。もう一度撮ってみて！";
+
+      setMessages((prev) => [...prev, { role: "agent", text: hint, character: teacher }]);
+      setLoadingPhase("idle");
+
+      setSpeaking(true);
+      setTalkingChar(teacher);
+      await speakText(hint, teacher, setTtsDebug);
+      setTalkingChar(null);
+      setSpeaking(false);
+    } catch {
+      setMessages((prev) => [...prev, { role: "agent", text: "ごめん、うまく読み取れなかった。もう一度試してね。" }]);
+      setLoadingPhase("idle");
+    }
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -964,6 +1004,9 @@ export default function Home() {
             return (
               <div key={i} className="flex justify-end items-end gap-2">
                 <div className="bg-blue-500 text-white px-4 py-3 rounded-2xl rounded-tr-sm max-w-[78%] sm:max-w-sm text-sm shadow">
+                  {msg.imageUrl && (
+                    <img src={msg.imageUrl} alt="宿題の写真" className="rounded-xl mb-2 max-w-full" />
+                  )}
                   {msg.text}
                 </div>
                 <div className="w-9 h-9 rounded-full bg-green-100 flex-shrink-0 overflow-hidden flex items-center justify-center border-2 border-white shadow-md">
@@ -1041,6 +1084,29 @@ export default function Home() {
       {/* 入力エリア（LINE風） */}
       <div className="bg-white border-t border-gray-200 px-3 py-2 pb-3">
         <div className="flex items-center gap-2 max-w-2xl mx-auto">
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) { unlockSpeech(); sendPhoto(file); }
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => photoInputRef.current?.click()}
+            disabled={loadingPhase !== "idle" || speaking}
+            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${
+              loadingPhase !== "idle" || speaking
+                ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                : "bg-amber-100 text-amber-600 hover:bg-amber-200 active:scale-95"
+            }`}
+          >
+            📷
+          </button>
           <button
             onClick={speaking ? stopSpeaking : recording ? stopRecording : startRecording}
             disabled={!speaking && micDisabled}
