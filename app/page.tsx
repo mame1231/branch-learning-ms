@@ -157,14 +157,13 @@ export default function Home() {
   const [loadingPhase, setLoadingPhase] = useState<"idle" | "thinking" | "checking">("idle");
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [talkingChar, setTalkingChar] = useState<CharacterKey | null>(null);
+  const [, setTalkingChar] = useState<CharacterKey | null>(null);
   const [interimText, setInterimText] = useState("");
   const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
   const [ttsDebug, setTtsDebug] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const speechUnlockedRef = useRef(false);
   const interimTextRef = useRef("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const faceVideoRef = useRef<HTMLVideoElement>(null);
@@ -537,8 +536,7 @@ export default function Home() {
     const CONFUSED: FaceExpression[] = ["sad"];
     if (CONFUSED.includes(expr)) {
       confusedCountRef.current += 1;
-      console.log("[face] sad count:", confusedCountRef.current, "idle:", loadingPhase === "idle", "speaking:", speaking, "recording:", recording);
-      if (confusedCountRef.current >= 1 && loadingPhase === "idle" && !speaking && !recording) {
+      if (confusedCountRef.current >= 1 && loadingPhase === "idle" && !recording) {
         confusedCountRef.current = 0;
         const teacher = teacherGender ?? "female";
         const msg = "難しかった？もっとわかりやすく説明しようか？";
@@ -551,7 +549,6 @@ export default function Home() {
         });
       }
     } else {
-      if (confusedCountRef.current > 0) console.log("[face] reset (expr:", expr, ")");
       confusedCountRef.current = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

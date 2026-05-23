@@ -231,12 +231,27 @@ export default function AdminPage() {
           <div className="bg-white rounded-2xl shadow p-6 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-gray-700">承認待ちブランチ</h2>
-              <a
-                href="/knowledge"
-                className="text-sm text-green-600 hover:underline"
-              >
-                発見マップを見る →
-              </a>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    if (!confirm('「なんでも」ブランチを教科別に再分類しますか？')) return;
+                    const res = await fetch('/api/admin/reclassify', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ password: 'test' }),
+                    });
+                    const data = await res.json();
+                    alert(`完了！ ${data.updated}件を再分類しました（対象${data.total}件）`);
+                    fetchBranches();
+                  }}
+                  className="text-xs text-purple-600 hover:underline"
+                >
+                  🔄 なんでもを再分類
+                </button>
+                <a href="/knowledge" className="text-sm text-green-600 hover:underline">
+                  発見マップを見る →
+                </a>
+              </div>
             </div>
             {branches.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">

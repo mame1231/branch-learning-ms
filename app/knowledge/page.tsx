@@ -21,6 +21,77 @@ type Branch = {
   grade: number | null
 }
 
+const JP_STOP_BIGRAMS = new Set([
+  "する","できる","なる","いる","ある","れる","られる","てい","ので","には","から","まで","こと","もの","ため","とき","よう","ほど","など","また","しか","ただ","さらに","たり","だり","ます","です","ない","なく","よる","より","その","この","あの","どの","それ","これ","あれ","どれ","では","して","おり","ており",
+])
+
+function extractBigrams(text: string): Set<string> {
+  const clean = text.replace(/[、。！？\s]/g, '')
+  const bigrams = new Set<string>()
+  for (let i = 0; i < clean.length - 1; i++) {
+    const bg = clean.slice(i, i + 2)
+    if (!JP_STOP_BIGRAMS.has(bg)) bigrams.add(bg)
+  }
+  return bigrams
+}
+
+function similarity(a: Branch, b: Branch): number {
+  const kA = extractBigrams(a.branch_summary + a.child_question)
+  const kB = extractBigrams(b.branch_summary + b.child_question)
+  let common = 0
+  kA.forEach(k => { if (kB.has(k)) common++ })
+  const union = new Set([...kA, ...kB]).size
+  return union === 0 ? 0 : common / union
+}
+
+function sortBySimilarity(branches: Branch[]): Branch[] {
+  if (branches.length <= 1) return branches
+  const remaining = [...branches]
+  const sorted: Branch[] = [remaining.splice(0, 1)[0]]
+  while (remaining.length > 0) {
+    const last = sorted[sorted.length - 1]
+    let bestIdx = 0, bestSim = -1
+    remaining.forEach((b, i) => {
+      const s = similarity(last, b)
+      if (s > bestSim) { bestSim = s; bestIdx = i }
+    })
+    sorted.push(remaining.splice(bestIdx, 1)[0])
+  }
+  return sorted
+}
+
+// 教科間の平均類似度で教科の隣接順を決める
+function orderSubjects(grouped: Record<string, Branch[]>): string[] {
+  const subjects = Object.keys(grouped)
+  if (subjects.length <= 2) return subjects
+
+  function subjectSim(a: string, b: string): number {
+    const ba = grouped[a], bb = grouped[b]
+    let total = 0
+    for (const x of ba) for (const y of bb) total += similarity(x, y)
+    return total / (ba.length * bb.length)
+  }
+
+  const remaining = [...subjects]
+  const ordered = [remaining.splice(0, 1)[0]]
+  while (remaining.length > 0) {
+    const last = ordered[ordered.length - 1]
+    let bestIdx = 0, bestSim = -1
+    remaining.forEach((s, i) => {
+      const sim = subjectSim(last, s)
+      if (sim > bestSim) { bestSim = sim; bestIdx = i }
+    })
+    ordered.push(remaining.splice(bestIdx, 1)[0])
+  }
+  return ordered
+}
+
+const SUBJECT_COLORS: Record<string, string> = {
+  '理科': '#3b82f6', '算数': '#f59e0b', '国語': '#ef4444',
+  '社会': '#8b5cf6', '英語': '#10b981', '図工': '#f97316',
+  '音楽': '#ec4899', '体育': '#06b6d4', 'その他': '#6b7280',
+}
+
 function buildGraph(branches: Branch[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = []
   const edges: Edge[] = []
@@ -32,42 +103,52 @@ function buildGraph(branches: Branch[]): { nodes: Node[]; edges: Edge[] } {
     grouped[key].push(b)
   }
 
-  const subjects = Object.keys(grouped)
-  const subjectSpacingX = 520
-  const startX = (subjects.length - 1) * subjectSpacingX * -0.5
+  const subjects = orderSubjects(grouped)
+  const total = branches.length
+  const NODE_W = 165
+  const MIN_SPACING = 175
+  const RING_R = Math.max(320, (total * MIN_SPACING) / (2 * Math.PI))
+  const SUBJ_R = RING_R * 0.48
 
-  subjects.forEach((subject, si) => {
-    const subjectBranches = grouped[subject]
-    const cx = startX + si * subjectSpacingX
-    const cy = 0
+  let angleOffset = -Math.PI / 2
 
+  subjects.forEach(subject => {
+    const sorted = sortBySimilarity(grouped[subject])
+    const count = sorted.length
+    const arcAngle = (count / total) * 2 * Math.PI
+    const arcMid = angleOffset + arcAngle / 2
+    const color = SUBJECT_COLORS[subject] ?? '#6b7280'
+
+    // 教科ノード（輪の内側）
     nodes.push({
       id: `subject-${subject}`,
-      position: { x: cx - 80, y: cy },
+      position: {
+        x: Math.cos(arcMid) * SUBJ_R - 60,
+        y: Math.sin(arcMid) * SUBJ_R - 20,
+      },
       data: { label: subject },
       style: {
-        background: '#16a34a',
+        background: color,
         color: '#fff',
-        borderRadius: 12,
-        padding: '10px 20px',
+        borderRadius: 10,
+        padding: '8px 18px',
         fontWeight: 700,
-        fontSize: 15,
+        fontSize: 14,
         border: 'none',
-        boxShadow: '0 2px 8px rgba(22,163,74,0.3)',
-        minWidth: 160,
-        textAlign: 'center',
+        boxShadow: `0 2px 8px ${color}55`,
+        whiteSpace: 'nowrap',
       },
     })
 
-    const count = subjectBranches.length
-    subjectBranches.forEach((b, bi) => {
-      const angle = (bi / count) * 2 * Math.PI - Math.PI / 2
-      const radius = Math.max(180, 80 + count * 30)
-      const x = cx + Math.cos(angle) * radius - 100
-      const y = cy + Math.sin(angle) * radius - 30
+    // ブランチノードをアーク上に均等配置
+    sorted.forEach((b, bi) => {
+      const t = (bi + 0.5) / count
+      const angle = angleOffset + t * arcAngle
+      const x = Math.cos(angle) * RING_R - NODE_W / 2
+      const y = Math.sin(angle) * RING_R - 40
 
-      const label = b.branch_summary.length > 40
-        ? b.branch_summary.slice(0, 40) + '…'
+      const label = b.branch_summary.length > 38
+        ? b.branch_summary.slice(0, 38) + '…'
         : b.branch_summary
 
       nodes.push({
@@ -76,17 +157,19 @@ function buildGraph(branches: Branch[]): { nodes: Node[]; edges: Edge[] } {
         data: {
           label: (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-amber-600 font-medium">「{b.child_question.slice(0, 25)}{b.child_question.length > 25 ? '…' : ''}」</span>
+              <span className="text-xs font-medium" style={{ color }}>
+                「{b.child_question.slice(0, 20)}{b.child_question.length > 20 ? '…' : ''}」
+              </span>
               <span className="text-xs text-gray-700">{label}</span>
             </div>
           ),
         },
         style: {
-          background: '#fefce8',
-          border: '1.5px solid #fbbf24',
+          background: '#fff',
+          border: `1.5px solid ${color}`,
           borderRadius: 10,
-          padding: '8px 12px',
-          width: 200,
+          padding: '7px 10px',
+          width: NODE_W,
           fontSize: 12,
           boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
         },
@@ -96,11 +179,36 @@ function buildGraph(branches: Branch[]): { nodes: Node[]; edges: Edge[] } {
         id: `e-${subject}-${b.id}`,
         source: `subject-${subject}`,
         target: b.id,
-        style: { stroke: '#86efac', strokeWidth: 2 },
+        style: { stroke: color, strokeWidth: 1.5, opacity: 0.5 },
         animated: false,
       })
     })
+
+    angleOffset += arcAngle
   })
+
+  // ブランチが別教科のブランチと特に似ていれば、その教科ノードへ線を引く
+  for (const b of branches) {
+    const mySubj = b.subject ?? 'その他'
+    const maxSimBySubject: Record<string, number> = {}
+    for (const other of branches) {
+      const otherSubj = other.subject ?? 'その他'
+      if (otherSubj === mySubj) continue
+      const sim = similarity(b, other)
+      if ((maxSimBySubject[otherSubj] ?? 0) < sim) maxSimBySubject[otherSubj] = sim
+    }
+    for (const [subj, maxSim] of Object.entries(maxSimBySubject)) {
+      if (maxSim >= 0.15) {
+        edges.push({
+          id: `cross-${b.id}-${subj}`,
+          source: b.id,
+          target: `subject-${subj}`,
+          style: { stroke: '#a78bfa', strokeWidth: 1.5, strokeDasharray: '4,3', opacity: 0.65 },
+          animated: false,
+        })
+      }
+    }
+  }
 
   return { nodes, edges }
 }
@@ -164,7 +272,7 @@ export default function KnowledgePage() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             fitView
-            fitViewOptions={{ padding: 0.3 }}
+            fitViewOptions={{ padding: 0.25 }}
           >
             <Background color="#e5e7eb" gap={20} />
             <Controls />

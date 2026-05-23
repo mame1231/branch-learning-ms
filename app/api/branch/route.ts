@@ -65,6 +65,10 @@ export async function POST(request: NextRequest) {
 
         if (approved && judged.childFacingSummary) {
           const supabase = createServerClient();
+          const savedSubject = subjectStr === "なんでも" && judged.inferredSubject
+            ? judged.inferredSubject
+            : subjectStr;
+
           await supabase.from("branches").insert({
             student_id: studentId || null,
             conversation_id: conversationId || null,
@@ -73,7 +77,7 @@ export async function POST(request: NextRequest) {
             evidence_ids: judged.evidenceIds ?? [],
             judge_status: "judge_checked",
             grade: gradeNum,
-            subject: subjectStr,
+            subject: savedSubject,
           });
         }
 

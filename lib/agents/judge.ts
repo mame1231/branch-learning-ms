@@ -10,10 +10,14 @@ export type JudgeResult = {
   evidenceIds: string[];
   gradeNote: string;
   childFacingSummary: string;
+  inferredSubject?: string;
 };
+
+const KNOWN_SUBJECTS = ["国語", "算数", "理科", "社会", "英語", "図工", "音楽", "体育"];
 
 function buildSystemPrompt(grade: number, subject: string): string {
   const gradeConfig = GRADE_CONFIG[grade];
+  const isNandemo = subject === "なんでも";
   return `あなたは教育コンテンツの品質を審査するエージェントです。
 Generator Agentが生成した「横道ブランチ候補」を評価してください。
 
@@ -40,7 +44,8 @@ ${subject}
   "reason": "判定理由（1-2文）",
   "evidenceIds": ["使用したevidenceのid配列（なければ空配列）"],
   "gradeNote": "学年適合に関する補足（1文）",
-  "childFacingSummary": "子どもに提示する最終的な説明（上記言語ルールで。judge_rejectedの場合は空文字）"
+  "childFacingSummary": "子どもに提示する最終的な説明（上記言語ルールで。judge_rejectedの場合は空文字）"${isNandemo ? `,
+  "inferredSubject": "ブランチの内容が最も近い教科（${KNOWN_SUBJECTS.join("・")}のどれか1つ。どれにも当てはまらない場合は「なんでも」）"` : ""}
 }`;
 }
 
