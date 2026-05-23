@@ -77,17 +77,21 @@ ${gradeConfig.languageGuide}
 }`;
 }
 
+export type HistoryMessage = { role: "user" | "assistant"; content: string };
+
 export async function runGeneratorAgent(
   childMessage: string,
   grade: number,
   subject: string,
   characterMode = "both",
-  teacherGender = "female"
+  teacherGender = "female",
+  history: HistoryMessage[] = [],
 ): Promise<GeneratorResult> {
   const response = await getLLMClient().chat.completions.create({
     model: getLLMModel(),
     messages: [
       { role: "system", content: buildSystemPrompt(grade, subject, characterMode, teacherGender) },
+      ...history,
       { role: "user", content: childMessage },
     ],
     response_format: { type: "json_object" },

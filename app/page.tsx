@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CharacterAvatar, CharacterKey } from "@/components/CharacterAvatar";
 import { GRADE_LABELS, SUBJECTS, toGradeDisplay } from "@/lib/config/grades";
 import { createClient } from "@/lib/supabase";
+import { useFaceExpression, type FaceExpression } from "@/lib/hooks/useFaceExpression";
 
 type Profile = { nickname: string | null; avatar_url: string | null };
 
@@ -36,6 +37,12 @@ type Message = {
   branchLabel?: string;
   imageUrl?: string;
 };
+
+function playSound(name: "branch" | "start" | "start2") {
+  const audio = new Audio(`/sounds/${name}.mp3`);
+  audio.volume = 0.6;
+  audio.play().catch(() => {});
+}
 
 const BRANCH_LABELS = [
   "よりみち発見！",
@@ -160,6 +167,11 @@ export default function Home() {
   const speechUnlockedRef = useRef(false);
   const interimTextRef = useRef("");
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const faceVideoRef = useRef<HTMLVideoElement>(null);
+  const faceStreamRef = useRef<MediaStream | null>(null);
+  const [faceEnabled, setFaceEnabled] = useState(false);
+  const [faceExpression, setFaceExpression] = useState<FaceExpression | null>(null);
+  const confusedCountRef = useRef(0);
 
   // セッション確認・プロフィール・前回会話取得
   useEffect(() => {
@@ -345,6 +357,7 @@ export default function Home() {
         if (queue.length > 0) {
           if (!started) { setSpeaking(true); started = true; }
           const item = queue.shift()!;
+          if (item.char === BRANCH_CHARACTER) playSound("branch");
           setTalkingChar(item.char);
           await speakText(item.text, item.char, setTtsDebug);
           setTalkingChar(null);
@@ -361,7 +374,22 @@ export default function Home() {
       const res = await fetch("/api/branch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, grade, subject, characterMode: "both", teacherGender: teacher, studentId, conversationId }),
+        body: JSON.stringify({
+          message: text,
+          grade,
+          subject,
+          characterMode: "both",
+          teacherGender: teacher,
+          studentId,
+          conversationId,
+          history: messages
+            .filter((m) => m.role === "child" || m.role === "agent")
+            .slice(-8)
+            .map((m) => ({
+              role: m.role === "child" ? "user" : "assistant",
+              content: m.text,
+            })),
+        }),
       });
 
       const reader = res.body!.getReader();
@@ -477,6 +505,53 @@ export default function Home() {
       setLoadingPhase("idle");
     }
   }
+
+  // カメラ起動・停止
+  async function toggleFaceCamera() {
+    if (faceEnabled) {
+      faceStreamRef.current?.getTracks().forEach((t) => t.stop());
+      faceStreamRef.current = null;
+      if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+      setFaceEnabled(false);
+      setFaceExpression(null);
+      confusedCountRef.current = 0;
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        faceStreamRef.current = stream;
+        if (faceVideoRef.current) {
+          faceVideoRef.current.srcObject = stream;
+          await faceVideoRef.current.play();
+        }
+        setFaceEnabled(true);
+      } catch {
+        alert("カメラの許可が必要です");
+      }
+    }
+  }
+
+  // 表情コールバック（confused が2回連続で先生が声かけ）
+  const handleExpression = useCallback((expr: FaceExpression) => {
+    setFaceExpression(expr);
+    const CONFUSED: FaceExpression[] = ["sad", "fearful", "disgusted", "angry"];
+    if (CONFUSED.includes(expr)) {
+      confusedCountRef.current += 1;
+      if (confusedCountRef.current >= 2 && loadingPhase === "idle" && !speaking && !recording) {
+        confusedCountRef.current = 0;
+        send("難しかった？もっとわかりやすく説明しようか？");
+      }
+    } else {
+      confusedCountRef.current = 0;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingPhase, speaking, recording]);
+
+  useFaceExpression(faceVideoRef, faceEnabled, handleExpression);
+
+  const EXPRESSION_EMOJI: Record<FaceExpression, string> = {
+    happy: "😊", sad: "😢", angry: "😠", surprised: "😲",
+    disgusted: "😖", fearful: "😰", neutral: "😐",
+  };
 
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -914,6 +989,7 @@ export default function Home() {
           <button
             onClick={() => {
               if (!saved) return;
+              playSound("start");
               setMessages(saved.messages);
               setConversationId(saved.id);
               setTheme(null);
@@ -925,6 +1001,7 @@ export default function Home() {
           </button>
           <button
             onClick={() => {
+              playSound("start2");
               setMessages([]);
               setConversationId(null);
               setTheme(null);
@@ -1081,6 +1158,16 @@ export default function Home() {
         <div ref={bottomRef} />
       </div>
 
+      {/* 表情カメラプレビュー（常にDOMに存在、表示/非表示をCSSで切替） */}
+      <div className={`absolute bottom-24 right-4 z-20 flex flex-col items-center gap-1 transition-opacity ${faceEnabled ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-green-400 shadow-lg bg-black">
+          <video ref={faceVideoRef} className="w-full h-full object-cover scale-x-[-1]" playsInline muted />
+        </div>
+        {faceExpression && (
+          <span className="text-xl">{EXPRESSION_EMOJI[faceExpression]}</span>
+        )}
+      </div>
+
       {/* 入力エリア（LINE風） */}
       <div className="bg-white border-t border-gray-200 px-3 py-2 pb-3">
         <div className="flex items-center gap-2 max-w-2xl mx-auto">
@@ -1096,6 +1183,16 @@ export default function Home() {
               e.target.value = "";
             }}
           />
+          <button
+            onClick={toggleFaceCamera}
+            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${
+              faceEnabled
+                ? "bg-purple-200 text-purple-700 hover:bg-purple-300 active:scale-95 shadow-md"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95"
+            }`}
+          >
+            {faceEnabled ? "👁" : "😶"}
+          </button>
           <button
             onClick={() => photoInputRef.current?.click()}
             disabled={loadingPhase !== "idle" || speaking}

@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
 
   const cleanText = text
     .replace(/\p{Emoji_Presentation}/gu, "")
+    .replace(/[「」『』【】〔〕""''`´''""]/g, "")
+    .replace(/[*#_~|\\]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 

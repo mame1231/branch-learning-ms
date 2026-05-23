@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
-import { runGeneratorAgent } from "@/lib/agents/generator";
+import { runGeneratorAgent, type HistoryMessage } from "@/lib/agents/generator";
 import { runJudgeAgent } from "@/lib/agents/judge";
 import { searchEvidence, getAllEvidence } from "@/lib/tools/evidence";
 import { createServerClient } from "@/lib/supabase-server";
 
 export async function POST(request: NextRequest) {
-  const { message, grade, subject, characterMode, teacherGender, studentId, conversationId } = await request.json();
+  const { message, grade, subject, characterMode, teacherGender, studentId, conversationId, history } = await request.json();
 
   if (!message || typeof message !== "string") {
     return Response.json({ error: "message is required" }, { status: 400 });
@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
 
       try {
         // Step 1: Generator（速い）
-        const generated = await runGeneratorAgent(message, gradeNum, subjectStr, charMode, teacher);
+        const safeHistory: HistoryMessage[] = Array.isArray(history) ? history.slice(-8) : [];
+        const generated = await runGeneratorAgent(message, gradeNum, subjectStr, charMode, teacher, safeHistory);
 
         if (!generated.hasYokomichi) {
           send({

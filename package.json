@@ -11,7 +11,9 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
+    "@vladmandic/face-api": "^1.7.15",
     "@xyflow/react": "^12.10.2",
+    "face-api.js": "^0.22.2",
     "groq-sdk": "^1.1.2",
     "next": "16.2.4",
     "openai": "^6.37.0",
