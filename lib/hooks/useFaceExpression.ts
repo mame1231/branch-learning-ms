@@ -41,7 +41,7 @@ export function useFaceExpression(
 
     const expMap = result.expressions as Record<string, number>;
     const top = Object.entries(expMap).sort((a, b) => b[1] - a[1])[0];
-    if (top && top[1] > 0.4) {
+    if (top && top[1] > 0.2) {
       onStatus?.("detected");
       onExpression(top[0] as FaceExpression, top[1]);
     } else {

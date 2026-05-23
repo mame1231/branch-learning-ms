@@ -537,7 +537,8 @@ export default function Home() {
     const CONFUSED: FaceExpression[] = ["sad"];
     if (CONFUSED.includes(expr)) {
       confusedCountRef.current += 1;
-      if (confusedCountRef.current >= 2 && loadingPhase === "idle" && !speaking && !recording) {
+      console.log("[face] sad count:", confusedCountRef.current, "idle:", loadingPhase === "idle", "speaking:", speaking, "recording:", recording);
+      if (confusedCountRef.current >= 1 && loadingPhase === "idle" && !speaking && !recording) {
         confusedCountRef.current = 0;
         const teacher = teacherGender ?? "female";
         const msg = "難しかった？もっとわかりやすく説明しようか？";
@@ -550,6 +551,7 @@ export default function Home() {
         });
       }
     } else {
+      if (confusedCountRef.current > 0) console.log("[face] reset (expr:", expr, ")");
       confusedCountRef.current = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -584,26 +586,38 @@ export default function Home() {
     const recognition = new SR();
     recognition.lang = "ja-JP";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
 
     let gotResult = false;
+    let finalTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFinalText = "";
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       gotResult = true;
       const result = e.results[e.results.length - 1];
       const text = result[0].transcript;
       if (result.isFinal) {
+        lastFinalText = text;
         interimTextRef.current = "";
         setInterimText("");
-        setRecording(false);
-        send(text);
       } else {
+        // 途中発話（えーと等）があればタイマーをリセット
+        if (finalTimer) { clearTimeout(finalTimer); finalTimer = null; }
         interimTextRef.current = text;
         setInterimText(text);
       }
+      // 最後の発話から2秒無音で送信
+      if (finalTimer) clearTimeout(finalTimer);
+      finalTimer = setTimeout(() => {
+        recognition.stop();
+        setRecording(false);
+        const textToSend = lastFinalText || interimTextRef.current;
+        if (textToSend.trim()) send(textToSend.trim());
+      }, 2000);
     };
 
     recognition.onend = () => {
+      if (finalTimer) return; // finalTimer が動いている場合はそちらに任せる
       setRecording(false);
       const text = interimTextRef.current;
       interimTextRef.current = "";
