@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CharacterAvatar, CharacterKey } from "@/components/CharacterAvatar";
 import { GRADE_LABELS, SUBJECTS, toGradeDisplay } from "@/lib/config/grades";
 import { createClient } from "@/lib/supabase";
-import { useFaceExpression, type FaceExpression } from "@/lib/hooks/useFaceExpression";
+import { useFaceExpression, type FaceExpression, type FaceStatus } from "@/lib/hooks/useFaceExpression";
 
 type Profile = { nickname: string | null; avatar_url: string | null };
 
@@ -171,6 +171,7 @@ export default function Home() {
   const faceStreamRef = useRef<MediaStream | null>(null);
   const [faceEnabled, setFaceEnabled] = useState(false);
   const [faceExpression, setFaceExpression] = useState<FaceExpression | null>(null);
+  const [faceStatus, setFaceStatus] = useState<FaceStatus>("loading");
   const confusedCountRef = useRef(0);
 
   // セッション確認・プロフィール・前回会話取得
@@ -533,20 +534,28 @@ export default function Home() {
   // 表情コールバック（confused が2回連続で先生が声かけ）
   const handleExpression = useCallback((expr: FaceExpression) => {
     setFaceExpression(expr);
-    const CONFUSED: FaceExpression[] = ["sad", "fearful", "disgusted", "angry"];
+    const CONFUSED: FaceExpression[] = ["sad"];
     if (CONFUSED.includes(expr)) {
       confusedCountRef.current += 1;
       if (confusedCountRef.current >= 2 && loadingPhase === "idle" && !speaking && !recording) {
         confusedCountRef.current = 0;
-        send("難しかった？もっとわかりやすく説明しようか？");
+        const teacher = teacherGender ?? "female";
+        const msg = "難しかった？もっとわかりやすく説明しようか？";
+        setMessages((prev) => [...prev, { role: "agent", text: msg, character: teacher }]);
+        setSpeaking(true);
+        setTalkingChar(teacher);
+        speakText(msg, teacher, setTtsDebug).finally(() => {
+          setTalkingChar(null);
+          setSpeaking(false);
+        });
       }
     } else {
       confusedCountRef.current = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingPhase, speaking, recording]);
+  }, [loadingPhase, speaking, recording, teacherGender]);
 
-  useFaceExpression(faceVideoRef, faceEnabled, handleExpression);
+  useFaceExpression(faceVideoRef, faceEnabled, handleExpression, setFaceStatus);
 
   const EXPRESSION_EMOJI: Record<FaceExpression, string> = {
     happy: "😊", sad: "😢", angry: "😠", surprised: "😲",
@@ -1130,7 +1139,7 @@ export default function Home() {
             <CharacterAvatar character={teacherGender ?? "female"} size={52} />
             <div className="bg-green-100 px-4 py-3 rounded-2xl text-sm text-green-800 flex items-center gap-2">
               <span className="animate-pulse">🌿</span>
-              <span>ブランチを探してるよ...</span>
+              <span>考えてるよ...</span>
             </div>
           </div>
         )}
@@ -1160,12 +1169,25 @@ export default function Home() {
 
       {/* 表情カメラプレビュー（常にDOMに存在、表示/非表示をCSSで切替） */}
       <div className={`absolute bottom-24 right-4 z-20 flex flex-col items-center gap-1 transition-opacity ${faceEnabled ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-        <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-green-400 shadow-lg bg-black">
+        <div className={`relative w-16 h-16 rounded-full overflow-hidden shadow-lg bg-black border-2 ${
+          faceStatus === "detected" ? "border-green-400" :
+          faceStatus === "no_face" ? "border-gray-400" :
+          "border-yellow-400"
+        }`}>
           <video ref={faceVideoRef} className="w-full h-full object-cover scale-x-[-1]" playsInline muted />
+          {faceStatus === "loading" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+              <span className="text-white text-xs">読込中</span>
+            </div>
+          )}
         </div>
-        {faceExpression && (
-          <span className="text-xl">{EXPRESSION_EMOJI[faceExpression]}</span>
-        )}
+        <div className="text-center">
+          {faceStatus === "loading" && <span className="text-xs text-yellow-600">モデル読み込み中...</span>}
+          {faceStatus === "no_face" && <span className="text-xs text-gray-400">顔を映してね</span>}
+          {faceStatus === "detected" && faceExpression && (
+            <span className="text-xl">{EXPRESSION_EMOJI[faceExpression]}</span>
+          )}
+        </div>
       </div>
 
       {/* 入力エリア（LINE風） */}
