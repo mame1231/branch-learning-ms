@@ -5,6 +5,7 @@ import { runGeneratorAgent, type HistoryMessage } from "@/lib/agents/generator";
 import { runJudgeAgent } from "@/lib/agents/judge";
 import { searchEvidence, getAllEvidence } from "@/lib/tools/evidence";
 import { createServerClient } from "@/lib/supabase-server";
+import { toGradeText } from "@/lib/utils/toGradeText";
 
 export async function POST(request: NextRequest) {
   const { message, grade, subject, characterMode, teacherGender, studentId, conversationId, history } = await request.json();
@@ -41,10 +42,12 @@ export async function POST(request: NextRequest) {
         }
 
         // 先生の答えを先に流す（Judge前）
-        send({ type: "immediate", text: generated.answerWithBranch });
+        const immediateText = await toGradeText(generated.answerWithBranch, gradeNum);
+        send({ type: "immediate", text: immediateText });
         // 友達の反応：約40%の確率でのみ送る
         if (generated.immediateResponse && Math.random() < 0.4) {
-          send({ type: "tomo_immediate", text: generated.immediateResponse });
+          const tomoText = await toGradeText(generated.immediateResponse, gradeNum);
+          send({ type: "tomo_immediate", text: tomoText });
         }
 
         // Step 2: Evidence Tool + Judge Agent（少し遅い）
@@ -93,8 +96,11 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const childFacing = approved && judged.childFacingSummary?.trim()
+        const rawChildFacing = approved && judged.childFacingSummary?.trim()
           ? judged.childFacingSummary
+          : null;
+        const childFacing = rawChildFacing
+          ? await toGradeText(rawChildFacing, gradeNum)
           : null;
 
         send({

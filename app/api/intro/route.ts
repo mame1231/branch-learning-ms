@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getLLMClient, getLLMModel } from "@/lib/llm";
 import { GRADE_CONFIG } from "@/lib/config/grades";
+import { toGradeText } from "@/lib/utils/toGradeText";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,9 @@ senseiが出したテーマに反応しつつ、自分も知りたい！とい�
     });
 
     const result = JSON.parse(response.choices[0].message.content ?? "{}");
+    const gradeNum = grade as number;
+    if (result.senseiLine) result.senseiLine = await toGradeText(result.senseiLine, gradeNum);
+    if (result.tomoLine) result.tomoLine = await toGradeText(result.tomoLine, gradeNum);
     return Response.json(result);
   } catch {
     // フォールバック
