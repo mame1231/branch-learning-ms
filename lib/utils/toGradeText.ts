@@ -12,47 +12,61 @@ function katakanaToHiragana(str: string): string {
 
 type Tokenizer = kuromoji.Tokenizer<kuromoji.IpadicFeatures>;
 let tokenizerCache: Tokenizer | null = null;
-let tokenizerPromise: Promise<Tokenizer> | null = null;
+
+// モジュールロード時点から辞書の初期化を開始しておく
+const tokenizerPromise: Promise<Tokenizer> = new Promise((resolve, reject) => {
+  kuromoji
+    .builder({ dicPath: path.join(process.cwd(), "node_modules/kuromoji/dict") })
+    .build((err, tokenizer) => {
+      if (err) { reject(err); return; }
+      tokenizerCache = tokenizer;
+      resolve(tokenizer);
+    });
+}).catch((err) => {
+  // 辞書ファイルが見つからない場合はサーバーをクラッシュさせない
+  console.warn("[toGradeText] kuromoji init failed:", err?.message);
+  return Promise.reject(err);
+}) as Promise<Tokenizer>;
 
 function getTokenizer(): Promise<Tokenizer> {
   if (tokenizerCache) return Promise.resolve(tokenizerCache);
-  if (tokenizerPromise) return tokenizerPromise;
-  tokenizerPromise = new Promise((resolve, reject) => {
-    kuromoji
-      .builder({ dicPath: path.join(process.cwd(), "node_modules/kuromoji/dict") })
-      .build((err, tokenizer) => {
-        if (err) { reject(err); return; }
-        tokenizerCache = tokenizer;
-        resolve(tokenizer);
-      });
-  });
   return tokenizerPromise;
 }
 
-// 学年外の漢字をひらがなに変換
+// 学年外の漢字をひらがなに変換（失敗時は元のテキストをそのまま返す）
 export async function toGradeText(text: string, grade: number): Promise<string> {
-  const allowed = new Set(CUMULATIVE_KANJI[grade] ?? "");
+  try {
+    const allowed = new Set(CUMULATIVE_KANJI[grade] ?? "");
 
-  // 変換不要なら早期リターン
-  const needsConversion = [...text].some(
-    (ch) => KANJI_RE.test(ch) && !allowed.has(ch)
-  );
-  if (!needsConversion) return text;
+    // 変換不要なら早期リターン
+    const needsConversion = [...text].some(
+      (ch) => KANJI_RE.test(ch) && !allowed.has(ch)
+    );
+    if (!needsConversion) return text;
 
-  const tokenizer = await getTokenizer();
-  const tokens = tokenizer.tokenize(text);
+    const tokenizer = await Promise.race([
+      getTokenizer(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("tokenizer timeout")), 5000)
+      ),
+    ]);
 
-  return tokens
-    .map((token) => {
-      const surface = token.surface_form;
-      const hasDisallowed = [...surface].some(
-        (ch) => KANJI_RE.test(ch) && !allowed.has(ch)
-      );
-      if (!hasDisallowed) return surface;
+    const tokens = tokenizer.tokenize(text);
 
-      // 読みをひらがなに変換（読みがない場合はsurfaceをそのまま）
-      const reading = token.reading;
-      return reading ? katakanaToHiragana(reading) : surface;
-    })
-    .join("");
+    return tokens
+      .map((token) => {
+        const surface = token.surface_form;
+        const hasDisallowed = [...surface].some(
+          (ch) => KANJI_RE.test(ch) && !allowed.has(ch)
+        );
+        if (!hasDisallowed) return surface;
+
+        const reading = token.reading;
+        return reading ? katakanaToHiragana(reading) : surface;
+      })
+      .join("");
+  } catch {
+    // kuromoji初期化失敗時は元のテキストを返す
+    return text;
+  }
 }
