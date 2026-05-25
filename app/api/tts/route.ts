@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
   const profile = VOICE_PROFILES[character as keyof typeof VOICE_PROFILES] ?? VOICE_PROFILES.sensei;
 
   const cleanText = text
-    .replace(/\p{Emoji_Presentation}/gu, "")
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+    .replace(/️/g, "")
     .replace(/[「」『』【】〔〕""''`´''""]/g, "")
     .replace(/[*#_~|\\]/g, "")
     .replace(/\s+/g, " ")
