@@ -141,6 +141,7 @@ export default function Home() {
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<Phase>("welcome");
+  const [authChecked, setAuthChecked] = useState(false);
   const [savedConversations, setSavedConversations] = useState<Record<string, SavedConversation>>({});
   const [teacherGender, setTeacherGender] = useState<TeacherGender | null>(null);
   const [friendType, setFriendType] = useState<FriendType | null>(null);
@@ -178,6 +179,7 @@ export default function Home() {
     const id = localStorage.getItem("student_id");
     if (!id) { router.push("/login"); return; }
     setStudentId(id);
+    setAuthChecked(true);
     const savedTeacher = localStorage.getItem("teacher_gender") as TeacherGender | null;
     if (savedTeacher) setTeacherGender(savedTeacher);
     const savedFriend = localStorage.getItem("friend_type") as FriendType | null;
@@ -664,6 +666,8 @@ export default function Home() {
   }
 
   const micDisabled = loadingPhase !== "idle" || speaking;
+
+  if (!authChecked) return null;
 
   // ── ウェルカム（設定画面）─────────────────────────────────
   if (phase === "welcome") {
