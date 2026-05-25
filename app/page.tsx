@@ -173,6 +173,7 @@ export default function Home() {
   const [faceExpression, setFaceExpression] = useState<FaceExpression | null>(null);
   const [faceStatus, setFaceStatus] = useState<FaceStatus>("loading");
   const confusedCountRef = useRef(0);
+  const lastFaceMsgTimeRef = useRef(0);
 
   // セッション確認・プロフィール・前回会話取得
   useEffect(() => {
@@ -538,8 +539,11 @@ export default function Home() {
     const CONFUSED: FaceExpression[] = ["sad"];
     if (CONFUSED.includes(expr)) {
       confusedCountRef.current += 1;
-      if (confusedCountRef.current >= 1 && loadingPhase === "idle" && !recording) {
+      const now = Date.now();
+      const cooldownOk = now - lastFaceMsgTimeRef.current > 60_000; // 1分クールダウン
+      if (confusedCountRef.current >= 3 && loadingPhase === "idle" && !speaking && !recording && cooldownOk) {
         confusedCountRef.current = 0;
+        lastFaceMsgTimeRef.current = now;
         const teacher = teacherGender ?? "female";
         const msg = "難しかった？もっとわかりやすく説明しようか？";
         setMessages((prev) => [...prev, { role: "agent", text: msg, character: teacher }]);
