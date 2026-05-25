@@ -88,6 +88,10 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
+
+      <a href="/admin" className="mt-8 text-xs text-gray-400 hover:text-gray-600">
+        管理者ページ →
+      </a>
     </div>
   )
 }
