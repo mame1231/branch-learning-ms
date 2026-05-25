@@ -180,11 +180,11 @@ export default function Home() {
     if (!id) { router.push("/login"); return; }
     setStudentId(id);
     setAuthChecked(true);
-    const savedTeacher = localStorage.getItem("teacher_gender") as TeacherGender | null;
+    const savedTeacher = localStorage.getItem(`teacher_gender_${id}`) as TeacherGender | null;
     if (savedTeacher) setTeacherGender(savedTeacher);
-    const savedFriend = localStorage.getItem("friend_type") as FriendType | null;
+    const savedFriend = localStorage.getItem(`friend_type_${id}`) as FriendType | null;
     if (savedFriend) setFriendType(savedFriend);
-    const savedGrade = localStorage.getItem("grade");
+    const savedGrade = localStorage.getItem(`grade_${id}`);
     if (savedGrade) setGrade(Number(savedGrade));
     const supabase = createClient();
 
@@ -250,17 +250,17 @@ export default function Home() {
   }
 
   function handleGradeSelect(g: number) {
-    localStorage.setItem("grade", String(g));
+    if (studentId) localStorage.setItem(`grade_${studentId}`, String(g));
     setGrade(g);
   }
 
   function selectTeacher(gender: TeacherGender) {
-    localStorage.setItem("teacher_gender", gender);
+    if (studentId) localStorage.setItem(`teacher_gender_${studentId}`, gender);
     setTeacherGender(gender);
   }
 
   function selectFriend(type: FriendType) {
-    localStorage.setItem("friend_type", type);
+    if (studentId) localStorage.setItem(`friend_type_${studentId}`, type);
     setFriendType(type);
   }
 
