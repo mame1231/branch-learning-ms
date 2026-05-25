@@ -38,7 +38,7 @@ type Message = {
   imageUrl?: string;
 };
 
-function playSound(name: "branch" | "start" | "start2") {
+function playSound(name: "branch" | "start" | "start2" | "click") {
   const audio = new Audio(`/sounds/${name}.mp3`);
   audio.volume = 0.6;
   audio.play().catch(() => {});
@@ -174,6 +174,7 @@ export default function Home() {
   const [faceStatus, setFaceStatus] = useState<FaceStatus>("loading");
   const confusedCountRef = useRef(0);
   const lastFaceMsgTimeRef = useRef(0);
+  const isSendingRef = useRef(false);
 
   // セッション確認・プロフィール・前回会話取得
   useEffect(() => {
@@ -181,12 +182,13 @@ export default function Home() {
     if (!id) { router.push("/login"); return; }
     setStudentId(id);
     setAuthChecked(true);
-    const savedTeacher = localStorage.getItem(`teacher_gender_${id}`) as TeacherGender | null;
-    if (savedTeacher) setTeacherGender(savedTeacher);
-    const savedFriend = localStorage.getItem(`friend_type_${id}`) as FriendType | null;
-    if (savedFriend) setFriendType(savedFriend);
-    const savedGrade = localStorage.getItem(`grade_${id}`);
-    if (savedGrade) setGrade(Number(savedGrade));
+    setPhase("welcome");
+    const savedTeacher = (localStorage.getItem(`teacher_gender_${id}`) ?? localStorage.getItem("teacher_gender")) as TeacherGender | null;
+    if (savedTeacher) { setTeacherGender(savedTeacher); localStorage.setItem(`teacher_gender_${id}`, savedTeacher); }
+    const savedFriend = (localStorage.getItem(`friend_type_${id}`) ?? localStorage.getItem("friend_type")) as FriendType | null;
+    if (savedFriend) { setFriendType(savedFriend); localStorage.setItem(`friend_type_${id}`, savedFriend); }
+    const savedGrade = localStorage.getItem(`grade_${id}`) ?? localStorage.getItem("grade");
+    if (savedGrade) { setGrade(Number(savedGrade)); localStorage.setItem(`grade_${id}`, savedGrade); }
     const supabase = createClient();
 
     supabase.from("profiles").select("nickname, avatar_url").eq("id", id).single()
@@ -210,12 +212,7 @@ export default function Home() {
           }
           setSavedConversations(map);
         }
-        // 学年・先生・友達がすべて設定済みならウェルカム画面をスキップ
-        if (savedGrade && savedTeacher && savedFriend) {
-          setPhase(Object.keys(map).length > 0 ? "resume" : "subject");
-        } else {
-          setPhase("welcome");
-        }
+        setPhase("welcome");
       });
   }, [router]);
 
@@ -272,6 +269,7 @@ export default function Home() {
 
   function handleSubjectSelect(s: string) {
     unlockSpeech();
+    playSound("click");
     setSubject(s);
     if (savedConversations[s]) {
       setPhase("resume");
@@ -338,6 +336,8 @@ export default function Home() {
   async function send(textOverride?: string) {
     const text = (textOverride ?? input).trim();
     if (!text || loadingPhase !== "idle" || speaking || grade === null || subject === null) return;
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
 
     setInput("");
     setMessages((prev) => [...prev, { role: "child", text }]);
@@ -465,6 +465,7 @@ export default function Home() {
         ]);
         setLoadingPhase("idle");
       }
+      isSendingRef.current = false;
     }
 
     // 会話ログ保存
@@ -474,6 +475,7 @@ export default function Home() {
     streamingDone = true;
     signal.wake?.();
     await drainPromise;
+    isSendingRef.current = false;
   }
 
   async function sendPhoto(file: File) {
@@ -606,11 +608,9 @@ export default function Home() {
       const text = result[0].transcript;
       if (result.isFinal) {
         lastFinalText = text;
-        interimTextRef.current = "";
-        setInterimText("");
+        interimTextRef.current = text;
+        setInterimText(text);
       } else {
-        // 途中発話（えーと等）があればタイマーをリセット
-        if (finalTimer) { clearTimeout(finalTimer); finalTimer = null; }
         interimTextRef.current = text;
         setInterimText(text);
       }
@@ -620,6 +620,8 @@ export default function Home() {
         recognition.stop();
         setRecording(false);
         const textToSend = lastFinalText || interimTextRef.current;
+        setInterimText("");
+        interimTextRef.current = "";
         if (textToSend.trim()) send(textToSend.trim());
       }, 2000);
     };
@@ -885,7 +887,7 @@ export default function Home() {
         {resumeSubjects.length > 0 && (
           <div className="w-full max-w-sm mb-4">
             <p className="text-xs text-gray-400 mb-2 text-center">続きがある教科</p>
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="grid grid-cols-3 gap-2">
               {resumeSubjects.map((s) => {
                 const info = SUBJECTS.find((sub) => sub.id === s);
                 const saved = savedConversations[s];
@@ -902,13 +904,14 @@ export default function Home() {
                       setPhase("chat");
                     }}
                     disabled={!canStart}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all active:scale-95 ${
+                    className={`text-xs font-bold px-2 py-2 rounded-2xl border transition-all active:scale-95 text-center ${
                       canStart
                         ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
                         : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                     }`}
                   >
-                    {info?.emoji} {s} →
+                    <span className="block text-base mb-0.5">{info?.emoji}</span>
+                    <span>{s}</span>
                   </button>
                 );
               })}
@@ -917,7 +920,7 @@ export default function Home() {
         )}
 
         <button
-          onClick={() => canStart && setPhase("subject")}
+          onClick={() => { if (canStart) { playSound("click"); setPhase("subject"); } }}
           disabled={!canStart}
           className={`w-full max-w-sm font-bold py-4 rounded-2xl transition-all shadow-md text-lg active:scale-95 ${
             canStart
@@ -940,7 +943,7 @@ export default function Home() {
         {/* 緑ヘッダー */}
         <header className="bg-green-600 text-white px-4 py-3 flex items-center justify-between shadow">
           <button
-            onClick={() => setPhase("welcome")}
+            onClick={() => { stopAudio(); setPhase("welcome"); }}
             className="text-white hover:text-green-100 flex items-center gap-1 text-sm font-medium"
           >
             ← もどる
@@ -965,26 +968,16 @@ export default function Home() {
         </p>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm">
-          {SUBJECTS.map((s) => {
-            const hasSaved = !!savedConversations[s.id];
-            return (
-              <button
-                key={s.id}
-                onClick={() => handleSubjectSelect(s.id)}
-                className={`relative bg-white border-2 text-gray-700 font-bold py-3 sm:py-5 rounded-2xl hover:border-green-400 hover:bg-green-50 transition-all shadow-sm flex flex-col items-center gap-1 sm:gap-2 active:scale-95 ${
-                  hasSaved ? "border-green-400" : "border-green-200"
-                }`}
-              >
-                {hasSaved && (
-                  <span className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight">
-                    続き
-                  </span>
-                )}
-                <span className="text-2xl sm:text-3xl">{s.emoji}</span>
-                <span className="text-xs sm:text-sm">{toGradeDisplay(s.id, grade!)}</span>
-              </button>
-            );
-          })}
+          {SUBJECTS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => handleSubjectSelect(s.id)}
+              className="bg-white border-2 border-green-200 text-gray-700 font-bold py-3 sm:py-5 rounded-2xl hover:border-green-400 hover:bg-green-50 transition-all shadow-sm flex flex-col items-center gap-1 sm:gap-2 active:scale-95"
+            >
+              <span className="text-2xl sm:text-3xl">{s.emoji}</span>
+              <span className="text-xs sm:text-sm">{toGradeDisplay(s.id, grade!)}</span>
+            </button>
+          ))}
         </div>
         </div>{/* /flex-1 */}
       </div>
@@ -999,14 +992,27 @@ export default function Home() {
       ? [...saved.messages].reverse().find((m) => m.role === "agent")?.text ?? ""
       : "";
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col items-center justify-center p-6">
-        <button
-          onClick={() => setPhase("subject")}
-          className="absolute top-5 left-5 text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-medium"
-        >
-          ← 教科えらびにもどる
-        </button>
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-amber-50 flex flex-col">
+        <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
+          <div className="flex-1">
+            <button
+              onClick={() => { stopAudio(); setPhase("subject"); }}
+              className="flex items-center gap-1 text-sm font-bold text-white hover:text-green-100"
+            >
+              ← もどる
+            </button>
+          </div>
+          <div className="flex-1 flex justify-end">
+            <a
+              href="/knowledge"
+              className="flex items-center gap-1 text-xs font-bold text-green-700 bg-white rounded-full px-3 py-1.5 hover:bg-green-50 transition-colors"
+            >
+              🌿 発見マップ
+            </a>
+          </div>
+        </header>
 
+        <div className="flex flex-col items-center justify-center flex-1 p-6">
         <div className="text-5xl mb-3">{subjectInfo?.emoji}</div>
         <h2 className="text-xl font-bold text-green-800 mb-1">
           {toGradeDisplay(subject, grade!)}
@@ -1045,6 +1051,7 @@ export default function Home() {
             はじめから
           </button>
         </div>
+        </div>{/* /flex-1 */}
       </div>
     );
   }
@@ -1058,7 +1065,7 @@ export default function Home() {
       <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
         <div className="flex-1">
           <button
-            onClick={() => { setPhase("subject"); setMessages([]); setConversationId(null); }}
+            onClick={() => { stopAudio(); setPhase("subject"); setMessages([]); setConversationId(null); }}
             className="flex items-center gap-1 text-sm font-bold text-white hover:text-green-100"
           >
             ← もどる
