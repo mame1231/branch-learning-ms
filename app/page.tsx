@@ -201,8 +201,8 @@ export default function Home() {
       .order("updated_at", { ascending: false })
       .limit(30)
       .then(({ data }) => {
+        const map: Record<string, SavedConversation> = {};
         if (data) {
-          const map: Record<string, SavedConversation> = {};
           for (const conv of data) {
             if (!map[conv.subject] && (conv.messages as Message[]).length > 1) {
               map[conv.subject] = conv as SavedConversation;
@@ -210,7 +210,12 @@ export default function Home() {
           }
           setSavedConversations(map);
         }
-        setPhase("welcome");
+        // 学年・先生・友達がすべて設定済みならウェルカム画面をスキップ
+        if (savedGrade && savedTeacher && savedFriend) {
+          setPhase(Object.keys(map).length > 0 ? "resume" : "subject");
+        } else {
+          setPhase("welcome");
+        }
       });
   }, [router]);
 
