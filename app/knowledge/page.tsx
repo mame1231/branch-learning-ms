@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   ReactFlow,
   type Node,
@@ -213,7 +214,10 @@ function buildGraph(branches: Branch[]): { nodes: Node[]; edges: Edge[] } {
   return { nodes, edges }
 }
 
-export default function KnowledgePage() {
+function KnowledgeContent() {
+  const searchParams = useSearchParams()
+  const isDemo = searchParams.get('demo') === '1'
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
@@ -225,6 +229,7 @@ export default function KnowledgePage() {
       .from('branches')
       .select('id, child_question, branch_summary, subject, grade')
       .eq('judge_status', 'mentor_approved')
+      .eq('is_demo', isDemo)
       .order('created_at', { ascending: true })
 
     const branches = (data as Branch[]) ?? []
@@ -236,18 +241,18 @@ export default function KnowledgePage() {
       setEdges(e)
     }
     setLoading(false)
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, isDemo])
 
   useEffect(() => { fetchAndBuild() }, [fetchAndBuild])
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <div className="bg-green-700 text-white px-6 py-4 shadow flex items-center justify-between">
+      <div className={`${isDemo ? 'bg-blue-700' : 'bg-green-700'} text-white px-6 py-4 shadow flex items-center justify-between`}>
         <div>
-          <h1 className="text-xl font-bold">発見マップ</h1>
-          <p className="text-sm text-green-200">承認されたブランチ: {branchCount}件</p>
+          <h1 className="text-xl font-bold">発見マップ{isDemo ? '（デモ）' : ''}</h1>
+          <p className={`text-sm ${isDemo ? 'text-blue-200' : 'text-green-200'}`}>承認されたブランチ: {branchCount}件</p>
         </div>
-        <button onClick={() => window.history.back()} className="text-sm text-green-200 hover:text-white">
+        <button onClick={() => window.history.back()} className={`text-sm ${isDemo ? 'text-blue-200' : 'text-green-200'} hover:text-white`}>
           ← もどる
         </button>
       </div>
@@ -280,5 +285,13 @@ export default function KnowledgePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function KnowledgePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">よみこみ中...</p></div>}>
+      <KnowledgeContent />
+    </Suspense>
   )
 }

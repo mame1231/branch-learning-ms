@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 
-const ADMIN_PASSWORD = 'test'
+const OWNER_PASSWORD = 'test'
+const DEMO_PASSWORD = 'hackathon'
 
 type Student = {
   id: string
@@ -34,23 +35,28 @@ function generateCode() {
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
+  const [isDemo, setIsDemo] = useState(false)
   const [pwInput, setPwInput] = useState('')
   const [pwError, setPwError] = useState(false)
   const pwRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (sessionStorage.getItem('admin_authed') === '1') setAuthed(true)
+    const stored = sessionStorage.getItem('admin_authed')
+    if (stored === 'owner' || stored === '1') { setAuthed(true); setIsDemo(false) }
+    else if (stored === 'demo') { setAuthed(true); setIsDemo(true) }
     else setTimeout(() => pwRef.current?.focus(), 50)
   }, [])
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (pwInput === ADMIN_PASSWORD) {
-      sessionStorage.setItem('admin_authed', '1')
-      setAuthed(true)
+    if (pwInput === OWNER_PASSWORD) {
+      sessionStorage.setItem('admin_authed', 'owner')
+      setAuthed(true); setIsDemo(false)
+    } else if (pwInput === DEMO_PASSWORD) {
+      sessionStorage.setItem('admin_authed', 'demo')
+      setAuthed(true); setIsDemo(true)
     } else {
-      setPwError(true)
-      setPwInput('')
+      setPwError(true); setPwInput('')
     }
   }
 
@@ -65,6 +71,7 @@ export default function AdminPage() {
     const { data } = await supabase
       .from('students')
       .select('id, code, created_at, profiles(nickname)')
+      .eq('is_demo', isDemo)
       .order('created_at', { ascending: false })
     setStudents((data as unknown as Student[]) ?? [])
   }
@@ -75,20 +82,24 @@ export default function AdminPage() {
       .from('branches')
       .select('id, child_question, branch_summary, evidence_ids, judge_status, grade, subject, created_at')
       .eq('judge_status', 'judge_checked')
+      .eq('is_demo', isDemo)
       .order('created_at', { ascending: false })
     setBranches((data as Branch[]) ?? [])
   }
 
   useEffect(() => {
-    fetchStudents()
-    fetchBranches()
-  }, [])
+    if (authed) {
+      fetchStudents()
+      fetchBranches()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed, isDemo])
 
   async function handleIssue() {
     setLoading(true)
     const code = generateCode()
     const supabase = createClient()
-    const { error } = await supabase.from('students').insert({ code })
+    const { error } = await supabase.from('students').insert({ code, is_demo: isDemo })
     if (!error) {
       setNewCode(code)
       await fetchStudents()
@@ -143,11 +154,18 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-green-700 text-white px-6 py-4 shadow">
-        <h1 className="text-xl font-bold">ブランチラーニング — 管理者</h1>
+      <div className={`${isDemo ? 'bg-blue-700' : 'bg-green-700'} text-white px-6 py-4 shadow flex items-center justify-between`}>
+        <h1 className="text-xl font-bold">
+          ブランチラーニング — {isDemo ? '審査員用デモ' : '管理者'}
+        </h1>
+        <button
+          onClick={() => { sessionStorage.removeItem('admin_authed'); location.reload() }}
+          className="text-xs opacity-60 hover:opacity-100"
+        >
+          ログアウト
+        </button>
       </div>
 
-      {/* タブ */}
       <div className="flex border-b border-gray-200 bg-white">
         <button
           onClick={() => setTab('students')}
@@ -179,9 +197,10 @@ export default function AdminPage() {
       <div className="max-w-2xl mx-auto p-6 flex flex-col gap-6">
         {tab === 'students' && (
           <>
-            {/* ID発行 */}
             <div className="bg-white rounded-2xl shadow p-6 flex flex-col gap-4">
-              <h2 className="font-bold text-gray-700">新しいIDを発行する</h2>
+              <h2 className="font-bold text-gray-700">
+                新しい{isDemo ? 'デモ用' : ''}IDを発行する
+              </h2>
               <button
                 onClick={handleIssue}
                 disabled={loading}
@@ -193,12 +212,13 @@ export default function AdminPage() {
                 <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 text-center">
                   <p className="text-sm text-green-600 mb-1">発行しました！</p>
                   <p className="text-3xl font-bold tracking-widest text-green-800">{newCode}</p>
-                  <p className="text-xs text-gray-400 mt-2">子どもにこのIDを伝えてください</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    {isDemo ? '審査員用のIDです' : '子どもにこのIDを伝えてください'}
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* 一覧 */}
             <div className="bg-white rounded-2xl shadow p-6">
               <h2 className="font-bold text-gray-700 mb-4">発行済みID一覧</h2>
               {students.length === 0 ? (
@@ -232,23 +252,28 @@ export default function AdminPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-gray-700">承認待ちブランチ</h2>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={async () => {
-                    if (!confirm('「なんでも」ブランチを教科別に再分類しますか？')) return;
-                    const res = await fetch('/api/admin/reclassify', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ password: 'test' }),
-                    });
-                    const data = await res.json();
-                    alert(`完了！ ${data.updated}件を再分類しました（対象${data.total}件）`);
-                    fetchBranches();
-                  }}
-                  className="text-xs text-purple-600 hover:underline"
+                {!isDemo && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm('「なんでも」ブランチを教科別に再分類しますか？')) return
+                      const res = await fetch('/api/admin/reclassify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: OWNER_PASSWORD }),
+                      })
+                      const data = await res.json()
+                      alert(`完了！ ${data.updated}件を再分類しました（対象${data.total}件）`)
+                      fetchBranches()
+                    }}
+                    className="text-xs text-purple-600 hover:underline"
+                  >
+                    🔄 なんでもを再分類
+                  </button>
+                )}
+                <a
+                  href={`/knowledge?demo=${isDemo ? '1' : '0'}`}
+                  className="text-sm text-green-600 hover:underline"
                 >
-                  🔄 なんでもを再分類
-                </button>
-                <a href="/knowledge" className="text-sm text-green-600 hover:underline">
                   発見マップを見る →
                 </a>
               </div>
@@ -267,9 +292,7 @@ export default function AdminPage() {
                           {b.subject}
                         </span>
                       )}
-                      {b.grade && (
-                        <span className="text-gray-400">{b.grade}年生</span>
-                      )}
+                      {b.grade && <span className="text-gray-400">{b.grade}年生</span>}
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">子どもの問い</p>

@@ -69,6 +69,17 @@ export async function POST(request: NextRequest) {
             ? judged.inferredSubject
             : subjectStr;
 
+          // デモ学生かどうか確認してbranchに伝播
+          let isDemo = false;
+          if (studentId) {
+            const { data: studentData } = await supabase
+              .from("students")
+              .select("is_demo")
+              .eq("id", studentId)
+              .single();
+            isDemo = studentData?.is_demo ?? false;
+          }
+
           await supabase.from("branches").insert({
             student_id: studentId || null,
             conversation_id: conversationId || null,
@@ -78,6 +89,7 @@ export async function POST(request: NextRequest) {
             judge_status: "judge_checked",
             grade: gradeNum,
             subject: savedSubject,
+            is_demo: isDemo,
           });
         }
 
