@@ -72,4 +72,64 @@ export const SUBJECTS = [
   { id: "なんでも", emoji: "✨" },
 ];
 
+/** 教科ごとの単元カード（「自由に聞きたい」は常に末尾） */
+export const UNITS: Record<string, { id: string; emoji: string }[]> = {
+  国語: [
+    { id: "漢字", emoji: "✏️" },
+    { id: "読み物・文学", emoji: "📚" },
+    { id: "言葉の意味", emoji: "💬" },
+    { id: "作文・表現", emoji: "📝" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  算数: [
+    { id: "計算", emoji: "🔢" },
+    { id: "図形", emoji: "📐" },
+    { id: "文章問題", emoji: "📄" },
+    { id: "単位・量", emoji: "📏" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  理科: [
+    { id: "生き物", emoji: "🌱" },
+    { id: "天気・気象", emoji: "☁️" },
+    { id: "物の性質", emoji: "🧪" },
+    { id: "電気・光", emoji: "💡" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  社会: [
+    { id: "地図・地理", emoji: "🗺️" },
+    { id: "歴史", emoji: "🏯" },
+    { id: "くらし・政治", emoji: "🏛️" },
+    { id: "産業・自然", emoji: "🌾" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  英語: [
+    { id: "単語", emoji: "🔤" },
+    { id: "会話", emoji: "💬" },
+    { id: "文法", emoji: "📝" },
+    { id: "読み書き", emoji: "✍️" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  図工: [
+    { id: "絵を描く", emoji: "🖌️" },
+    { id: "工作", emoji: "✂️" },
+    { id: "色・形", emoji: "🎨" },
+    { id: "鑑賞", emoji: "🖼️" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  音楽: [
+    { id: "歌", emoji: "🎤" },
+    { id: "楽器", emoji: "🎹" },
+    { id: "音楽のきまり", emoji: "🎼" },
+    { id: "鑑賞", emoji: "🎧" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+  体育: [
+    { id: "運動・スポーツ", emoji: "🏃" },
+    { id: "ルール", emoji: "📋" },
+    { id: "体のしくみ", emoji: "🫀" },
+    { id: "健康・保健", emoji: "🩺" },
+    { id: "自由に聞きたい", emoji: "✨" },
+  ],
+};
+
 export const GRADE_LABELS = ["1年生", "2年生", "3年生", "4年生", "5年生", "6年生"];

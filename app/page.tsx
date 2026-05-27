@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CharacterAvatar, CharacterKey } from "@/components/CharacterAvatar";
-import { GRADE_LABELS, SUBJECTS, toGradeDisplay } from "@/lib/config/grades";
+import { GRADE_LABELS, SUBJECTS, UNITS, toGradeDisplay } from "@/lib/config/grades";
 import { createClient } from "@/lib/supabase";
 import { useFaceExpression, type FaceExpression, type FaceStatus } from "@/lib/hooks/useFaceExpression";
 
@@ -36,6 +36,8 @@ type Message = {
   isBranch?: boolean;
   branchLabel?: string;
   imageUrl?: string;
+  isUnitSelect?: boolean;
+  unitSubject?: string;
 };
 
 function playSound(name: "branch" | "start" | "start2" | "click") {
@@ -147,6 +149,7 @@ export default function Home() {
   const [friendType, setFriendType] = useState<FriendType | null>(null);
   const [grade, setGrade] = useState<number | null>(null);
   const [subject, setSubject] = useState<string | null>(null);
+  const [unit, setUnit] = useState<string | null>(null);
   const [settingSection, setSettingSection] = useState<SettingSection>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -271,27 +274,61 @@ export default function Home() {
     unlockSpeech();
     playSound("click");
     setSubject(s);
-    if (savedConversations[s]) {
+    setUnit(null);
+    if (s === "なんでも") {
+      if (savedConversations[s]) { setPhase("resume"); } else { startChat(s, null); }
+    } else if (savedConversations[s]) {
       setPhase("resume");
     } else {
-      startChat(s);
+      showUnitCards(s);
     }
   }
 
-  async function startChat(selectedSubject: string) {
+  function showUnitCards(s: string) {
+    const teacher = teacherGender ?? "female";
+    stopAudio();
+    setSpeaking(false);
+    setTalkingChar(null);
+    setPhase("chat");
+    const q = "今日は何をやる？";
+    setMessages([
+      { role: "agent", text: q, character: teacher },
+      { role: "agent", text: "", character: teacher, isUnitSelect: true, unitSubject: s },
+    ]);
+    setSpeaking(true);
+    setTalkingChar(teacher);
+    speakText(q, teacher, setTtsDebug).finally(() => {
+      setSpeaking(false);
+      setTalkingChar(null);
+    });
+  }
+
+  function handleUnitCardSelect(u: string) {
+    unlockSpeech();
+    playSound("click");
+    // 「今日は何をやる？」のTTSを確実に止めてからチャット開始
+    stopAudio();
+    setSpeaking(false);
+    setTalkingChar(null);
+    setUnit(u);
+    setMessages([]);
+    startChat(subject!, u);
+  }
+
+  async function startChat(selectedSubject: string, selectedUnit: string | null = null) {
     const teacher = teacherGender ?? "female";
     const friend: CharacterKey = friendType ?? "friend_1";
     setPhase("chat");
     setLoadingPhase("thinking");
 
     let introMessages: Message[] = [];
-    let introTheme = selectedSubject;
+    let introTheme = selectedUnit ?? selectedSubject;
 
     try {
       const res = await fetch("/api/intro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grade, subject: selectedSubject, characterMode: "both", teacherGender: teacher }),
+        body: JSON.stringify({ grade, subject: selectedSubject, unit: selectedUnit, characterMode: "both", teacherGender: teacher }),
       });
       const data = await res.json();
       introTheme = data.theme ?? selectedSubject;
@@ -306,6 +343,7 @@ export default function Home() {
 
     setTheme(introTheme);
     setMessages(introMessages);
+    setSpeaking(true);       // TTS開始前にマイクを無効化（idle後の競合防止）
     setLoadingPhase("idle");
 
     if (studentId) {
@@ -317,7 +355,6 @@ export default function Home() {
     }
 
     // TTS で読み上げ
-    setSpeaking(true);
     try {
       setTalkingChar(teacher);
       await speakText(introMessages[0].text, teacher, setTtsDebug);
@@ -471,11 +508,11 @@ export default function Home() {
     // 会話ログ保存
     setMessages((prev) => { saveMessages(prev); return prev; });
 
-    // ストリーミング完了を通知してドレイン待機
+    // ストリーミング完了 → isSendingRef を解放（TTS終了を待たない）
     streamingDone = true;
     signal.wake?.();
+    isSendingRef.current = false; // ← TTS再生中でも次のメッセージを送れるように
     await drainPromise;
-    isSendingRef.current = false;
   }
 
   async function sendPhoto(file: File) {
@@ -676,7 +713,8 @@ export default function Home() {
     setTalkingChar(null);
   }
 
-  const micDisabled = loadingPhase !== "idle" || speaking;
+  const isSelectingUnit = messages.some((m) => m.isUnitSelect);
+  const micDisabled = loadingPhase !== "idle" || speaking || isSelectingUnit;
 
   if (!authChecked) return null;
 
@@ -1044,7 +1082,7 @@ export default function Home() {
               setMessages([]);
               setConversationId(null);
               setTheme(null);
-              startChat(subject);
+              if (subject !== "なんでも") { showUnitCards(subject!); } else { startChat(subject!, null); }
             }}
             className="bg-white border-2 border-green-400 text-green-700 font-bold py-4 rounded-2xl hover:bg-green-50 transition-all shadow-sm active:scale-95 text-lg"
           >
@@ -1065,7 +1103,7 @@ export default function Home() {
       <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
         <div className="flex-1">
           <button
-            onClick={() => { stopAudio(); setPhase("subject"); setMessages([]); setConversationId(null); }}
+            onClick={() => { stopAudio(); setPhase("subject"); setMessages([]); setConversationId(null); setUnit(null); }}
             className="flex items-center gap-1 text-sm font-bold text-white hover:text-green-100"
           >
             ← もどる
@@ -1136,6 +1174,29 @@ export default function Home() {
           }
 
           const avatarChar: CharacterKey = msg.character ?? (teacherGender ?? "female");
+
+          if (msg.isUnitSelect && msg.unitSubject) {
+            const units = UNITS[msg.unitSubject] ?? [];
+            return (
+              <div key={i} className="pl-14">
+                <div className="grid grid-cols-2 gap-2 max-w-[260px]">
+                  {units.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => handleUnitCardSelect(u.id)}
+                      className={`bg-white border-2 border-green-200 font-bold py-4 rounded-2xl hover:border-green-400 hover:bg-green-50 transition-all shadow-sm flex flex-col items-center gap-1.5 active:scale-95 ${
+                        u.id === "自由に聞きたい" ? "col-span-2" : ""
+                      }`}
+                    >
+                      <span className="text-2xl">{u.emoji}</span>
+                      <span className="text-xs text-gray-700">{grade ? toGradeDisplay(u.id, grade) : u.id}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={i}>
               {msg.isBranch ? (
