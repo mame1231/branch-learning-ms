@@ -154,9 +154,9 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className={`${isDemo ? 'bg-blue-700' : 'bg-green-700'} text-white px-6 py-4 shadow flex items-center justify-between`}>
+      <div className="bg-green-700 text-white px-6 py-4 shadow flex items-center justify-between">
         <h1 className="text-xl font-bold">
-          ブランチラーニング — {isDemo ? '審査員用デモ' : '管理者'}
+          ブランチラーニング — 管理者
         </h1>
         <button
           onClick={() => { sessionStorage.removeItem('admin_authed'); location.reload() }}
@@ -199,7 +199,7 @@ export default function AdminPage() {
           <>
             <div className="bg-white rounded-2xl shadow p-6 flex flex-col gap-4">
               <h2 className="font-bold text-gray-700">
-                新しい{isDemo ? 'デモ用' : ''}IDを発行する
+                新しいIDを発行する
               </h2>
               <button
                 onClick={handleIssue}
@@ -213,7 +213,7 @@ export default function AdminPage() {
                   <p className="text-sm text-green-600 mb-1">発行しました！</p>
                   <p className="text-3xl font-bold tracking-widest text-green-800">{newCode}</p>
                   <p className="text-xs text-gray-400 mt-2">
-                    {isDemo ? '審査員用のIDです' : '子どもにこのIDを伝えてください'}
+                    子どもにこのIDを伝えてください
                   </p>
                 </div>
               )}

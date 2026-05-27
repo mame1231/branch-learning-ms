@@ -247,10 +247,10 @@ function KnowledgeContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <div className={`${isDemo ? 'bg-blue-700' : 'bg-green-700'} text-white px-6 py-4 shadow flex items-center justify-between`}>
+      <div className="bg-green-700 text-white px-6 py-4 shadow flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">発見マップ{isDemo ? '（デモ）' : ''}</h1>
-          <p className={`text-sm ${isDemo ? 'text-blue-200' : 'text-green-200'}`}>承認されたブランチ: {branchCount}件</p>
+          <h1 className="text-xl font-bold">発見マップ</h1>
+          <p className="text-sm text-green-200">承認されたブランチ: {branchCount}件</p>
         </div>
         <button onClick={() => window.history.back()} className={`text-sm ${isDemo ? 'text-blue-200' : 'text-green-200'} hover:text-white`}>
           ← もどる
