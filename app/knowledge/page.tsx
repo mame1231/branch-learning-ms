@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ReactFlow,
   type Node,
   type Edge,
+  type ReactFlowInstance,
   Background,
   Controls,
   useNodesState,
@@ -222,6 +223,7 @@ function KnowledgeContent() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
   const [branchCount, setBranchCount] = useState(0)
+  const rfInstance = useRef<ReactFlowInstance | null>(null)
 
   const fetchAndBuild = useCallback(async () => {
     const supabase = createClient()
@@ -239,6 +241,7 @@ function KnowledgeContent() {
       const { nodes: n, edges: e } = buildGraph(branches)
       setNodes(n)
       setEdges(e)
+      setTimeout(() => rfInstance.current?.fitView({ padding: 0.25, duration: 400 }), 50)
     }
     setLoading(false)
   }, [setNodes, setEdges, isDemo])
@@ -246,7 +249,7 @@ function KnowledgeContent() {
   useEffect(() => { fetchAndBuild() }, [fetchAndBuild])
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50">
       <div className="bg-green-700 text-white px-6 py-4 shadow flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">発見マップ</h1>
@@ -257,7 +260,7 @@ function KnowledgeContent() {
         </button>
       </div>
 
-      <div className="flex-1" style={{ height: 'calc(100vh - 80px)' }}>
+      <div className="flex-1 min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-400">よみこみ中...</p>
@@ -276,8 +279,9 @@ function KnowledgeContent() {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            fitView
-            fitViewOptions={{ padding: 0.25 }}
+            onInit={(instance) => { rfInstance.current = instance }}
+            minZoom={0.05}
+            maxZoom={3}
           >
             <Background color="#e5e7eb" gap={20} />
             <Controls />
