@@ -33,21 +33,20 @@ export function CharacterAvatar({ character, talking = false, size = 64 }: Props
   const { prefix, label } = info
 
   // CSS Grid で2枚を同じセルに重ねて opacity 切替 → src 変更による消えなし
+  // 高さ固定・幅 auto で縦長キャラが自然な比率で表示される
   return (
-    <span style={{ display: 'grid', width: size, height: size, flexShrink: 0 }}>
+    <span style={{ display: 'grid', height: size, flexShrink: 0 }}>
       <img
         src={`/characters/${prefix}_closed.png`}
         alt={label}
-        width={size}
         height={size}
-        style={{ gridArea: '1/1', width: size, height: size, objectFit: 'contain', opacity: mouthOpen ? 0 : 1, transition: 'opacity 0.05s' }}
+        style={{ gridArea: '1/1', height: size, width: 'auto', opacity: mouthOpen ? 0 : 1, transition: 'opacity 0.05s' }}
       />
       <img
         src={`/characters/${prefix}_open.png`}
         alt=""
-        width={size}
         height={size}
-        style={{ gridArea: '1/1', width: size, height: size, objectFit: 'contain', opacity: mouthOpen ? 1 : 0, transition: 'opacity 0.05s' }}
+        style={{ gridArea: '1/1', height: size, width: 'auto', opacity: mouthOpen ? 1 : 0, transition: 'opacity 0.05s' }}
       />
     </span>
   )
