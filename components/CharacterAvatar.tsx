@@ -37,13 +37,13 @@ export function CharacterAvatar({ character, talking = false, size = 64 }: Props
   return (
     <span style={{ display: 'grid', height: size, flexShrink: 0 }}>
       <img
-        src={`/characters/${prefix}_closed.png`}
+        src={`/characters/${prefix}_closed.webp`}
         alt={label}
         height={size}
         style={{ gridArea: '1/1', height: size, width: 'auto', opacity: mouthOpen ? 0 : 1, transition: 'opacity 0.05s' }}
       />
       <img
-        src={`/characters/${prefix}_open.png`}
+        src={`/characters/${prefix}_open.webp`}
         alt=""
         height={size}
         style={{ gridArea: '1/1', height: size, width: 'auto', opacity: mouthOpen ? 1 : 0, transition: 'opacity 0.05s' }}
