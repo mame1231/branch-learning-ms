@@ -34,20 +34,20 @@ export function CharacterAvatar({ character, talking = false, size = 64 }: Props
 
   // 2枚重ねて CSS opacity で切り替え → src 変更による一瞬消えを防ぐ
   return (
-    <span style={{ position: 'relative', display: 'inline-block', width: size, height: size, flexShrink: 0 }}>
+    <span style={{ position: 'relative', display: 'inline-block', width: size, height: size, flexShrink: 0, overflow: 'hidden' }}>
       <img
         src={`/characters/${prefix}_closed.png`}
         alt={label}
         width={size}
         height={size}
-        style={{ position: 'absolute', top: 0, left: 0, objectFit: 'contain', opacity: mouthOpen ? 0 : 1, transition: 'opacity 0.05s' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: size, height: size, objectFit: 'contain', opacity: mouthOpen ? 0 : 1, transition: 'opacity 0.05s' }}
       />
       <img
         src={`/characters/${prefix}_open.png`}
         alt=""
         width={size}
         height={size}
-        style={{ position: 'absolute', top: 0, left: 0, objectFit: 'contain', opacity: mouthOpen ? 1 : 0, transition: 'opacity 0.05s' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: size, height: size, objectFit: 'contain', opacity: mouthOpen ? 1 : 0, transition: 'opacity 0.05s' }}
       />
     </span>
   )
