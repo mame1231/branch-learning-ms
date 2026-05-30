@@ -143,6 +143,7 @@ export default function AdminPage() {
             onChange={(e) => { setPwInput(e.target.value); setPwError(false) }}
             placeholder="パスワード"
             className="border-2 border-gray-200 rounded-xl px-4 py-3 text-center text-lg tracking-widest outline-none focus:border-green-400"
+            style={{ color: '#333333' }}
           />
           {pwError && <p className="text-red-500 text-sm text-center">パスワードが違います</p>}
           <button
