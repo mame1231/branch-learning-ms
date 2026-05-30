@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 
-const OWNER_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? ''
+const OWNER_PASSWORD = 'kiguma'
 const DEMO_PASSWORD = 'hackathon'
 
 type Student = {
