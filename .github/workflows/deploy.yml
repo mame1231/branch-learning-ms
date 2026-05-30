@@ -66,4 +66,5 @@ jobs:
               "AZURE_SPEECH_REGION=${{ secrets.AZURE_SPEECH_REGION }}" \
               "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
               "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
-              "AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }}"
+              "AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }}" \
+              "NEXT_PUBLIC_ADMIN_PASSWORD=${{ secrets.NEXT_PUBLIC_ADMIN_PASSWORD }}"
