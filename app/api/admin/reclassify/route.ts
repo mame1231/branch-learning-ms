@@ -30,7 +30,7 @@ async function inferSubject(question: string, summary: string): Promise<string> 
 
 export async function POST(request: NextRequest) {
   const { password } = await request.json();
-  if (password !== "test") {
+  if (password !== (process.env.ADMIN_PASSWORD ?? '')) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 

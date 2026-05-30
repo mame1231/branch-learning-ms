@@ -3,8 +3,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 
-const OWNER_PASSWORD = 'kiguma'
-const DEMO_PASSWORD = 'hackathon'
 
 type Student = {
   id: string
@@ -47,12 +45,19 @@ export default function AdminPage() {
     else setTimeout(() => pwRef.current?.focus(), 50)
   }, [])
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (pwInput === OWNER_PASSWORD) {
+    const res = await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwInput }),
+    })
+    const { role } = await res.json()
+    if (role === 'owner') {
       sessionStorage.setItem('admin_authed', 'owner')
+      sessionStorage.setItem('admin_pw', pwInput)
       setAuthed(true); setIsDemo(false)
-    } else if (pwInput === DEMO_PASSWORD) {
+    } else if (role === 'demo') {
       sessionStorage.setItem('admin_authed', 'demo')
       setAuthed(true); setIsDemo(true)
     } else {
@@ -259,7 +264,7 @@ export default function AdminPage() {
                       const res = await fetch('/api/admin/reclassify', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: OWNER_PASSWORD }),
+                        body: JSON.stringify({ password: sessionStorage.getItem('admin_pw') ?? '' }),
                       })
                       const data = await res.json()
                       alert(`完了！ ${data.updated}件を再分類しました（対象${data.total}件）`)

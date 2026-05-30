@@ -67,4 +67,4 @@ jobs:
               "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
               "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
               "AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }}" \
-              "NEXT_PUBLIC_ADMIN_PASSWORD=${{ secrets.NEXT_PUBLIC_ADMIN_PASSWORD }}"
+              "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}"
