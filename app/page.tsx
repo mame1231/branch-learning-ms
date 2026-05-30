@@ -273,6 +273,8 @@ export default function Home() {
   function handleSubjectSelect(s: string) {
     unlockSpeech();
     playSound("click");
+    setFaceEnabled(false);
+    setFaceExpression(null);
     setSubject(s);
     setUnit(null);
     if (s === "なんでも") {
@@ -1103,7 +1105,7 @@ export default function Home() {
       <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
         <div className="flex-1">
           <button
-            onClick={() => { stopAudio(); setPhase("subject"); setMessages([]); setConversationId(null); setUnit(null); }}
+            onClick={() => { stopAudio(); setFaceEnabled(false); setFaceExpression(null); setPhase("subject"); setMessages([]); setConversationId(null); setUnit(null); }}
             className="flex items-center gap-1 text-sm font-bold text-white hover:text-green-100"
           >
             ← もどる
