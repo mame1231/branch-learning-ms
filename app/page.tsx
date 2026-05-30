@@ -273,8 +273,7 @@ export default function Home() {
   function handleSubjectSelect(s: string) {
     unlockSpeech();
     playSound("click");
-    setFaceEnabled(false);
-    setFaceExpression(null);
+    stopFaceCamera();
     setSubject(s);
     setUnit(null);
     if (s === "なんでも") {
@@ -555,15 +554,20 @@ export default function Home() {
     }
   }
 
+  function stopFaceCamera() {
+    faceStreamRef.current?.getTracks().forEach((t) => t.stop());
+    faceStreamRef.current = null;
+    if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+    setFaceEnabled(false);
+    setFaceExpression(null);
+    confusedCountRef.current = 0;
+  }
+
   // カメラ起動・停止
   async function toggleFaceCamera() {
     if (faceEnabled) {
-      faceStreamRef.current?.getTracks().forEach((t) => t.stop());
-      faceStreamRef.current = null;
-      if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
-      setFaceEnabled(false);
-      setFaceExpression(null);
-      confusedCountRef.current = 0;
+      stopFaceCamera();
+      return;
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
@@ -1105,7 +1109,7 @@ export default function Home() {
       <header className="bg-green-600 text-white px-4 py-3 flex items-center shadow">
         <div className="flex-1">
           <button
-            onClick={() => { stopAudio(); setFaceEnabled(false); setFaceExpression(null); setPhase("subject"); setMessages([]); setConversationId(null); setUnit(null); }}
+            onClick={() => { stopAudio(); stopFaceCamera(); setPhase("subject"); setMessages([]); setConversationId(null); setUnit(null); }}
             className="flex items-center gap-1 text-sm font-bold text-white hover:text-green-100"
           >
             ← もどる
