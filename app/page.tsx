@@ -639,27 +639,38 @@ export default function Home() {
     const recognition = new SR();
     recognition.lang = "ja-JP";
     recognition.interimResults = true;
-    recognition.continuous = false; // iOS互換: continousはiOSで不安定
+    recognition.continuous = true;
 
-    let collectedText = "";
     let gotResult = false;
+    let finalTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFinalText = "";
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       gotResult = true;
-      // 全結果を結合して最終テキストを作る
-      let full = "";
-      for (let i = 0; i < e.results.length; i++) {
-        full += e.results[i][0].transcript;
+      const result = e.results[e.results.length - 1];
+      const text = result[0].transcript;
+      if (result.isFinal) {
+        lastFinalText = text;
       }
-      collectedText = full;
-      interimTextRef.current = full;
-      setInterimText(full);
+      interimTextRef.current = text;
+      setInterimText(text);
+      // 最後の発話から1.5秒無音で送信
+      if (finalTimer) clearTimeout(finalTimer);
+      finalTimer = setTimeout(() => {
+        finalTimer = null;
+        recognition.stop();
+        setRecording(false);
+        const textToSend = lastFinalText || interimTextRef.current;
+        setInterimText("");
+        interimTextRef.current = "";
+        if (textToSend.trim()) send(textToSend.trim());
+      }, 1500);
     };
 
     recognition.onend = () => {
+      if (finalTimer) return;
       setRecording(false);
-      const text = collectedText || interimTextRef.current;
-      collectedText = "";
+      const text = lastFinalText || interimTextRef.current;
       interimTextRef.current = "";
       setInterimText("");
       if (text.trim()) {
@@ -684,17 +695,14 @@ export default function Home() {
     };
 
     recognitionRef.current = recognition;
-    stopAudio();   // 再生中のTTSを停止
-    unlockAudio(); // マイクタップ時にオーディオ要素を有効化
-    // iOS: 音声システムが安定するまで少し待ってから開始
-    setTimeout(() => {
-      try {
-        recognition.start();
-        setRecording(true);
-      } catch {
-        alert("音声認識の起動に失敗しました。ページを再読み込みして試してください。");
-      }
-    }, 150);
+    try {
+      stopAudio();   // 再生中のTTSを停止
+      unlockAudio(); // iOS: タップ直後に同期で呼ぶことでジェスチャー紐付けを維持
+      recognition.start();
+      setRecording(true);
+    } catch {
+      alert("音声認識の起動に失敗しました。ページを再読み込みして試してください。");
+    }
   }
 
   function stopRecording() {
