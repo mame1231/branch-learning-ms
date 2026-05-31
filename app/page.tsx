@@ -312,7 +312,6 @@ export default function Home() {
     setSpeaking(false);
     setTalkingChar(null);
     setUnit(u);
-    setMessages([]);
     startChat(subject!, u);
   }
 
@@ -658,11 +657,13 @@ export default function Home() {
       if (finalTimer) clearTimeout(finalTimer);
       finalTimer = setTimeout(() => {
         finalTimer = null;
+        const textToSend = lastFinalText || interimTextRef.current;
+        // onend より先にクリアしておくことで二重送信を防ぐ
+        lastFinalText = "";
+        interimTextRef.current = "";
+        setInterimText("");
         recognition.stop();
         setRecording(false);
-        const textToSend = lastFinalText || interimTextRef.current;
-        setInterimText("");
-        interimTextRef.current = "";
         if (textToSend.trim()) send(textToSend.trim());
       }, 1500);
     };
