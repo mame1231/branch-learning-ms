@@ -696,8 +696,9 @@ export default function Home() {
 
     recognitionRef.current = recognition;
     try {
-      stopAudio();   // 再生中のTTSを停止
-      unlockAudio(); // iOS: タップ直後に同期で呼ぶことでジェスチャー紐付けを維持
+      stopAudio(); // 再生中のTTSを停止
+      // unlockAudio はここでは呼ばない：教科選択時に既にunlock済み
+      // iOS: recognition.start()はタップハンドラから直接（同期）呼ぶことが必須
       recognition.start();
       setRecording(true);
     } catch {
