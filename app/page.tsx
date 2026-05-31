@@ -643,8 +643,12 @@ export default function Home() {
     let gotResult = false;
     let finalTimer: ReturnType<typeof setTimeout> | null = null;
     let lastFinalText = "";
+    // PC(Chrome)では stop() 後もキュー済み onresult が遅れて発火し
+    // 新たなタイマーを作って二重送信することがある。stopped フラグで防ぐ。
+    let stopped = false;
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
+      if (stopped) return;
       gotResult = true;
       const result = e.results[e.results.length - 1];
       const text = result[0].transcript;
@@ -657,8 +661,8 @@ export default function Home() {
       if (finalTimer) clearTimeout(finalTimer);
       finalTimer = setTimeout(() => {
         finalTimer = null;
+        stopped = true;
         const textToSend = lastFinalText || interimTextRef.current;
-        // onend より先にクリアしておくことで二重送信を防ぐ
         lastFinalText = "";
         interimTextRef.current = "";
         setInterimText("");
