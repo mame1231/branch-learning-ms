@@ -684,14 +684,17 @@ export default function Home() {
     };
 
     recognitionRef.current = recognition;
-    try {
-      stopAudio();   // 再生中のTTSを停止
-      unlockAudio(); // マイクタップ時にオーディオ要素を有効化
-      recognition.start();
-      setRecording(true);
-    } catch {
-      alert("音声認識の起動に失敗しました。ページを再読み込みして試してください。");
-    }
+    stopAudio();   // 再生中のTTSを停止
+    unlockAudio(); // マイクタップ時にオーディオ要素を有効化
+    // iOS: 音声システムが安定するまで少し待ってから開始
+    setTimeout(() => {
+      try {
+        recognition.start();
+        setRecording(true);
+      } catch {
+        alert("音声認識の起動に失敗しました。ページを再読み込みして試してください。");
+      }
+    }, 150);
   }
 
   function stopRecording() {
