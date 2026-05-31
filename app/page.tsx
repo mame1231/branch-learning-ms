@@ -639,40 +639,27 @@ export default function Home() {
     const recognition = new SR();
     recognition.lang = "ja-JP";
     recognition.interimResults = true;
-    recognition.continuous = true;
+    recognition.continuous = false; // iOS互換: continousはiOSで不安定
 
+    let collectedText = "";
     let gotResult = false;
-    let finalTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastFinalText = "";
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       gotResult = true;
-      const result = e.results[e.results.length - 1];
-      const text = result[0].transcript;
-      if (result.isFinal) {
-        lastFinalText = text;
-        interimTextRef.current = text;
-        setInterimText(text);
-      } else {
-        interimTextRef.current = text;
-        setInterimText(text);
+      // 全結果を結合して最終テキストを作る
+      let full = "";
+      for (let i = 0; i < e.results.length; i++) {
+        full += e.results[i][0].transcript;
       }
-      // 最後の発話から2秒無音で送信
-      if (finalTimer) clearTimeout(finalTimer);
-      finalTimer = setTimeout(() => {
-        recognition.stop();
-        setRecording(false);
-        const textToSend = lastFinalText || interimTextRef.current;
-        setInterimText("");
-        interimTextRef.current = "";
-        if (textToSend.trim()) send(textToSend.trim());
-      }, 2000);
+      collectedText = full;
+      interimTextRef.current = full;
+      setInterimText(full);
     };
 
     recognition.onend = () => {
-      if (finalTimer) return; // finalTimer が動いている場合はそちらに任せる
       setRecording(false);
-      const text = interimTextRef.current;
+      const text = collectedText || interimTextRef.current;
+      collectedText = "";
       interimTextRef.current = "";
       setInterimText("");
       if (text.trim()) {
